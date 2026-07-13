@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1020.24 1020.24">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke: #e64038;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        fill: none;
+        stroke-linecap: round;
+        stroke-miterlimit: 10;
+        stroke-width: 35px;
+      }
+
+      .cls-2 {
+        stroke: url(#_新建渐变色板_1);
+      }
+
+      .cls-4 {
+        fill: #28ab56;
+      }
+
+      .cls-3 {
+        stroke: #3277ed;
+      }
+
+      .cls-5 {
+        fill: #fcb805;
+      }
+
+      .cls-6 {
+        fill: #3277ed;
+      }
+
+      .cls-7 {
+        fill: #fff;
+        filter: url(#outer-glow-1);
+      }
+    </style>
+    <filter id="outer-glow-1" x="0" y="0" width="1020.24" height="1020.24" filterUnits="userSpaceOnUse">
+      <feOffset dx="0" dy="0"/>
+      <feGaussianBlur result="blur" stdDeviation="10"/>
+      <feFlood flood-color="#000" flood-opacity=".4"/>
+      <feComposite in2="blur" operator="in"/>
+      <feComposite in="SourceGraphic"/>
+    </filter>
+    <linearGradient id="_新建渐变色板_1" data-name="新建渐变色板 1" x1="367.58" y1="743.08" x2="651.13" y2="743.08" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#28ab56"/>
+      <stop offset="1" stop-color="#fcb805"/>
+    </linearGradient>
+  </defs>
+  <g id="_图层_2" data-name="图层 2">
+    <rect class="cls-7" x="30.08" y="30.08" width="960" height="960" rx="255.02" ry="255.02"/>
+  </g>
+  <g id="_图层_3" data-name="图层 3">
+    <circle class="cls-6" cx="510.08" cy="262.5" r="80"/>
+    <circle class="cls-4" cx="293.15" cy="634.43" r="80"/>
+    <circle class="cls-5" cx="727.01" cy="632.31" r="82.12"/>
+    <path class="cls-3" d="M260.08,510.08c.26-87.3,49.18-171.56,123.77-215.84"/>
+    <path class="cls-2" d="M633.63,726.08c-55.12,31.94-106.7,33.92-123.55,34-16.86.08-70.38-1.41-125-33.49"/>
+    <path class="cls-1" d="M635.08,293.57c66.55,39.04,125.27,117.84,125,216.51"/>
+  </g>
+</svg>

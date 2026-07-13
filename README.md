@@ -1,4 +1,5 @@
 <div align="center">
+![logo](logo.svg)
 
 # ConnectAlso
 
