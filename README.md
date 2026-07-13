@@ -1,6 +1,5 @@
 <div align="center">
-
-![logo](https://raw.githubusercontent.com/Lightalso/ConnectAlso/9ef2204b79edf88473ce01f7f51026e6457dddf5/logo.svg)
+    <img src="https://raw.githubusercontent.com/Lightalso/ConnectAlso/9ef2204b79edf88473ce01f7f51026e6457dddf5/logo.svg" alt="logo" width="100px" />
 
 # ConnectAlso
 
