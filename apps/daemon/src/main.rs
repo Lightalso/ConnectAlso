@@ -21,6 +21,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::Layer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use uuid::Uuid;
 
 // ═══════════════════════════════════════════════════════════════════
@@ -150,6 +153,31 @@ struct ShutdownResponse {
     message: String,
 }
 
+#[derive(Debug, Serialize)]
+struct DiagnosticsResponse {
+    daemon: CheckResult,
+    control: CheckResult,
+    stun: CheckResult,
+    relay: CheckResult,
+    tun: CheckResult,
+    peers: Vec<PeerDiag>,
+}
+
+#[derive(Debug, Serialize)]
+struct CheckResult {
+    status: &'static str,
+    detail: String,
+    latency_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+struct PeerDiag {
+    hostname: String,
+    virtual_ip: String,
+    path: String,
+    reachable: bool,
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // CLI
 // ═══════════════════════════════════════════════════════════════════
@@ -183,9 +211,31 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+    // ── Logging: console + file ──
+    let log_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("connectalso")
+        .join("logs");
+    std::fs::create_dir_all(&log_dir).ok();
+
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "daemon.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(
+            Layer::new()
+                .with_writer(non_blocking)
+                .with_ansi(false),
+        )
+        .with(
+            Layer::new()
+                .with_writer(std::io::stderr)
+                .with_filter(EnvFilter::from_default_env()),
+        )
         .init();
+
+    // Keep _guard alive for the duration of the program
+    // (it will be dropped on shutdown, flushing pending logs)
 
     let cli = Cli::parse();
     let shutdown = CancellationToken::new();
@@ -245,6 +295,7 @@ async fn main() -> anyhow::Result<()> {
     let api_task = tokio::spawn(async move {
         let app = Router::new()
             .route("/status", get(handle_status))
+            .route("/diagnostics", get(handle_diagnostics))
             .route("/shutdown", post(handle_shutdown))
             .with_state(api_state);
         let listener = tokio::net::TcpListener::bind(api_listen).await.unwrap();
@@ -524,4 +575,104 @@ async fn handle_shutdown(
     State(_state): State<Arc<Mutex<SharedState>>>,
 ) -> Json<ShutdownResponse> {
     Json(ShutdownResponse { message: "shutdown initiated".into() })
+}
+
+async fn handle_diagnostics(
+    State(state): State<Arc<Mutex<SharedState>>>,
+) -> Json<DiagnosticsResponse> {
+    let s = state.lock().await;
+    let config = DaemonConfig::load();
+
+    // Check control service
+    let (control_status, control_detail, control_latency) =
+        check_http(&format!("{}/api/v1/health", config.as_ref().map(|c| c.control_url.as_str()).unwrap_or(""))).await;
+
+    // Check STUN
+    let (stun_status, stun_detail, stun_latency) =
+        check_stun(config.as_ref().and_then(|c| c.stun_server.parse().ok())).await;
+
+    // Check relay
+    let (relay_status, relay_detail, relay_latency) =
+        check_udp(config.as_ref().and_then(|c| c.relay_server.parse().ok()), b"RELAY_CHECK").await;
+
+    // TUN status
+    let tun_status = CheckResult {
+        status: "ok",
+        detail: format!("VIP: {}", s.virtual_ip),
+        latency_ms: None,
+    };
+
+    // Peer diagnostics
+    let mut peers = Vec::new();
+    for (_id, link) in &s.peer_links {
+        let lk = link.lock().await;
+        let path_str = match lk.path.current_status() {
+            PathStatus::Direct => "direct",
+            PathStatus::Relay => "relay",
+            PathStatus::Probing => "probing",
+        };
+        peers.push(PeerDiag {
+            hostname: lk.hostname.clone(),
+            virtual_ip: lk.vip.to_string(),
+            path: path_str.into(),
+            reachable: lk.path.current_status() != PathStatus::Probing,
+        });
+    }
+
+    Json(DiagnosticsResponse {
+        daemon: CheckResult { status: "ok", detail: format!("uptime {}s", s.started_at.elapsed().as_secs()), latency_ms: None },
+        control: CheckResult { status: control_status, detail: control_detail, latency_ms: control_latency },
+        stun: CheckResult { status: stun_status, detail: stun_detail, latency_ms: stun_latency },
+        relay: CheckResult { status: relay_status, detail: relay_detail, latency_ms: relay_latency },
+        tun: tun_status,
+        peers,
+    })
+}
+
+async fn check_http(url: &str) -> (&'static str, String, Option<u64>) {
+    let start = Instant::now();
+    match reqwest::get(url).await {
+        Ok(r) if r.status().is_success() => {
+            let ms = start.elapsed().as_millis() as u64;
+            ("ok", format!("HTTP {}", r.status()), Some(ms))
+        }
+        Ok(r) => ("warn", format!("HTTP {}", r.status()), None),
+        Err(e) => ("error", format!("{e}"), None),
+    }
+}
+
+async fn check_stun(server: Option<SocketAddr>) -> (&'static str, String, Option<u64>) {
+    let Some(server) = server else { return ("warn", "not configured".into(), None) };
+    let start = Instant::now();
+    match StunClient::bind().await {
+        Ok(c) => match c.discover(server).await {
+            Ok(addr) => {
+                let ms = start.elapsed().as_millis() as u64;
+                ("ok", format!("public: {addr}"), Some(ms))
+            }
+            Err(e) => ("error", format!("{e}"), None),
+        },
+        Err(e) => ("error", format!("{e}"), None),
+    }
+}
+
+async fn check_udp(server: Option<SocketAddr>, probe: &[u8]) -> (&'static str, String, Option<u64>) {
+    let Some(server) = server else { return ("warn", "not configured".into(), None) };
+    let start = Instant::now();
+    match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+        Ok(sock) => {
+            let _ = sock.send_to(probe, server).await;
+            let mut buf = [0u8; 64];
+            match tokio::time::timeout(std::time::Duration::from_secs(2), sock.recv_from(&mut buf)).await
+            {
+                Ok(Ok((n, from))) => {
+                    let ms = start.elapsed().as_millis() as u64;
+                    ("ok", format!("response {n}B from {from}"), Some(ms))
+                }
+                Ok(Err(e)) => ("error", format!("{e}"), None),
+                Err(_) => ("warn", "timeout (no response)".into(), None),
+            }
+        }
+        Err(e) => ("error", format!("{e}"), None),
+    }
 }

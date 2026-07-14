@@ -7,7 +7,6 @@ use serde::Deserialize;
 #[command(name = "connectalso")]
 #[command(about = "ConnectAlso — 简单、安全的跨平台异地组网工具")]
 struct Cli {
-    /// 守护进程本地 API 地址
     #[arg(long, default_value = "http://127.0.0.1:9823", global = true)]
     daemon_url: String,
 
@@ -18,19 +17,21 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// 查看守护进程状态和已连接对等端
-    Status,
-    /// 启动守护进程（后台运行）
+    Status {
+        /// 详细输出（含路径状态）
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    /// 运行全链路诊断
+    Diag,
+    /// 启动守护进程
     Start {
-        /// 控制服务地址
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
-
         #[arg(long, default_value = "127.0.0.1:3478")]
         stun_server: SocketAddr,
-
         #[arg(long, default_value = "127.0.0.1:33478")]
         relay_server: SocketAddr,
-
         #[arg(short, long, default_value = "unnamed")]
         hostname: String,
     },
@@ -53,92 +54,151 @@ struct StatusPeer {
     device_id: String,
     virtual_ip: String,
     hostname: String,
+    #[serde(default)]
+    path: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct ShutdownResponse {
-    message: String,
+struct DiagnosticsResponse {
+    daemon: CheckResult,
+    control: CheckResult,
+    stun: CheckResult,
+    relay: CheckResult,
+    tun: CheckResult,
+    peers: Vec<PeerDiag>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CheckResult {
+    status: String,
+    detail: String,
+    latency_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerDiag {
+    hostname: String,
+    virtual_ip: String,
+    path: String,
+    reachable: bool,
 }
 
 fn fmt_duration(secs: u64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     let s = secs % 60;
-    if h > 0 {
-        format!("{h}h {m}m {s}s")
-    } else if m > 0 {
-        format!("{m}m {s}s")
-    } else {
-        format!("{s}s")
+    if h > 0 { format!("{h}h {m}m {s}s") }
+    else if m > 0 { format!("{m}m {s}s") }
+    else { format!("{s}s") }
+}
+
+fn status_icon(status: &str) -> &str {
+    match status {
+        "ok" => "✓",
+        "warn" => "⚠",
+        "error" => "✗",
+        _ => "?",
     }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-
     match cli.command {
-        Commands::Status => cmd_status(&cli.daemon_url).await?,
-        Commands::Start {
-            control_url,
-            stun_server,
-            relay_server,
-            hostname,
-        } => cmd_start(&control_url, stun_server, relay_server, &hostname).await?,
+        Commands::Status { verbose } => cmd_status(&cli.daemon_url, verbose).await?,
+        Commands::Diag => cmd_diag(&cli.daemon_url).await?,
+        Commands::Start { control_url, stun_server, relay_server, hostname } =>
+            cmd_start(&control_url, stun_server, relay_server, &hostname).await?,
         Commands::Stop => cmd_stop(&cli.daemon_url).await?,
     }
-
     Ok(())
 }
 
-async fn cmd_status(daemon_url: &str) -> anyhow::Result<()> {
+async fn cmd_status(daemon_url: &str, verbose: bool) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
-    let resp = http
-        .get(format!("{daemon_url}/status"))
-        .send()
-        .await;
+    let resp = http.get(format!("{daemon_url}/status")).send().await;
 
     match resp {
         Ok(r) if r.status().is_success() => {
-            let status: StatusResponse = r.json().await?;
+            let s: StatusResponse = r.json().await?;
             println!("ConnectAlso Daemon");
-            println!("  Device ID : {}", status.device_id);
-            println!("  Virtual IP: {}", status.virtual_ip);
-            println!("  Hostname  : {}", status.hostname);
-            println!("  Uptime    : {}", fmt_duration(status.uptime_secs));
-            println!("  Peers     : {}", status.peer_count);
+            println!("  Device ID : {}", s.device_id);
+            println!("  Virtual IP: {}", s.virtual_ip);
+            println!("  Hostname  : {}", s.hostname);
+            println!("  Uptime    : {}", fmt_duration(s.uptime_secs));
+            println!("  Peers     : {}", s.peer_count);
 
-            if !status.peers.is_empty() {
+            if !s.peers.is_empty() {
                 println!();
-                println!("  {:<20}  {:<16}  {}", "PEER", "VIRTUAL IP", "HOSTNAME");
-                println!("  {}", "-".repeat(58));
-                for p in &status.peers {
-                    println!(
-                        "  {:<20}  {:<16}  {}",
-                        &p.device_id[..p.device_id.len().min(20)],
-                        p.virtual_ip,
-                        p.hostname
-                    );
+                if verbose {
+                    println!("  {:<16}  {:<16}  {:<10}  {}", "PEER", "VIRTUAL IP", "PATH", "HOSTNAME");
+                    println!("  {}", "-".repeat(64));
+                    for p in &s.peers {
+                        println!("  {:<16}  {:<16}  {:<10}  {}",
+                            &p.device_id[..p.device_id.len().min(16)],
+                            p.virtual_ip, p.path, p.hostname);
+                    }
+                } else {
+                    println!("  {:<20}  {:<16}  {}", "PEER", "VIRTUAL IP", "HOSTNAME");
+                    println!("  {}", "-".repeat(58));
+                    for p in &s.peers {
+                        println!("  {:<20}  {:<16}  {}",
+                            &p.device_id[..p.device_id.len().min(20)],
+                            p.virtual_ip, p.hostname);
+                    }
                 }
             }
         }
-        Ok(r) if r.status().is_server_error() => {
-            println!("Daemon returned an error.");
-        }
-        _ => {
-            println!("Daemon not running.");
-            println!("Start with: connectalso start");
-        }
+        Ok(r) if r.status().is_server_error() => println!("Daemon error."),
+        _ => println!("Daemon not running. Use: connectalso start"),
     }
+    Ok(())
+}
 
+async fn cmd_diag(daemon_url: &str) -> anyhow::Result<()> {
+    let http = reqwest::Client::new();
+    let resp = http.get(format!("{daemon_url}/diagnostics")).send().await;
+
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            let d: DiagnosticsResponse = r.json().await?;
+            println!("ConnectAlso Diagnostics");
+            println!("{}", "─".repeat(52));
+
+            let checks = [
+                ("Daemon ", &d.daemon),
+                ("Control", &d.control),
+                ("STUN   ", &d.stun),
+                ("Relay  ", &d.relay),
+                ("TUN    ", &d.tun),
+            ];
+
+            for (name, check) in &checks {
+                let icon = status_icon(&check.status);
+                let lat = check.latency_ms.map_or("".into(), |ms| format!(" ({ms}ms)"));
+                println!("  {icon} {name}: {}{lat}", check.detail);
+            }
+
+            if !d.peers.is_empty() {
+                println!();
+                println!("  Peers:");
+                for p in &d.peers {
+                    let icon = if p.reachable { "✓" } else { "✗" };
+                    println!("    {icon} {:<12}  {:<16}  path={}",
+                        p.hostname, p.virtual_ip, p.path);
+                }
+            }
+
+            let all_ok = checks.iter().all(|(_, c)| c.status == "ok");
+            if all_ok { println!("\nAll checks passed."); }
+        }
+        _ => println!("Daemon not running. Use: connectalso start"),
+    }
     Ok(())
 }
 
 async fn cmd_start(
-    control_url: &str,
-    stun_server: SocketAddr,
-    relay_server: SocketAddr,
-    hostname: &str,
+    control_url: &str, stun_server: SocketAddr, relay_server: SocketAddr, hostname: &str,
 ) -> anyhow::Result<()> {
     println!("ConnectAlso Desktop Alpha");
     println!("  Control : {control_url}");
@@ -146,67 +206,36 @@ async fn cmd_start(
     println!("  Relay   : {relay_server}");
     println!("  Host    : {hostname}");
 
-    // Check if daemon already running
     let http = reqwest::Client::new();
-    if http
-        .get("http://127.0.0.1:9823/status")
-        .send()
-        .await
-        .is_ok()
-    {
-        println!("\nDaemon is already running. Use 'connectalso status'.");
+    if http.get("http://127.0.0.1:9823/status").send().await.is_ok() {
+        println!("\nDaemon already running.");
         return Ok(());
     }
 
-    println!("\nStarting daemon...");
-
     let child = std::process::Command::new("connectalso-daemon")
-        .arg("--control-url")
-        .arg(control_url)
-        .arg("--stun-server")
-        .arg(stun_server.to_string())
-        .arg("--relay-server")
-        .arg(relay_server.to_string())
-        .arg("--hostname")
-        .arg(hostname)
+        .arg("--control-url").arg(control_url)
+        .arg("--stun-server").arg(stun_server.to_string())
+        .arg("--relay-server").arg(relay_server.to_string())
+        .arg("--hostname").arg(hostname)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
 
     match child {
-        Ok(c) => {
-            println!("Daemon started (PID: {}).", c.id());
-            println!("Run 'connectalso status' to view state.");
-        }
+        Ok(c) => println!("Daemon started (PID: {}).", c.id()),
         Err(_) => {
-            eprintln!("Binary 'connectalso-daemon' not found.");
-            eprintln!("Build and run manually:");
-            eprintln!("  cargo run -p connectalso-daemon -- \\");
-            eprintln!("    --control-url {control_url} \\");
-            eprintln!("    --stun-server {stun_server} \\");
-            eprintln!("    --relay-server {relay_server} \\");
-            eprintln!("    --hostname {hostname}");
+            eprintln!("'connectalso-daemon' not found. Run:");
+            eprintln!("  cargo run -p connectalso-daemon -- --control-url {control_url} --hostname {hostname}");
         }
     }
-
     Ok(())
 }
 
 async fn cmd_stop(daemon_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
-    let resp = http
-        .post(format!("{daemon_url}/shutdown"))
-        .send()
-        .await;
-
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            println!("Shutdown requested.");
-        }
-        _ => {
-            println!("Daemon not running or shutdown failed.");
-        }
+    match http.post(format!("{daemon_url}/shutdown")).send().await {
+        Ok(r) if r.status().is_success() => println!("Shutdown requested."),
+        _ => println!("Daemon not running."),
     }
-
     Ok(())
 }
