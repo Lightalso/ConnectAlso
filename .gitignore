@@ -1,0 +1,81 @@
+# ── Rust ──
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock for libraries is usually not committed,
+# but for a binary/workspace project it should be.
+# Uncomment if this is a library-only workspace:
+# Cargo.lock
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS ──
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ── Build artifacts ──
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.msi
+*.pkg
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+/build/
+/dist/
+/out/
+
+# ── Docker ──
+docker-compose.override.yml
+
+# ── Environment / Config ──
+.env
+.env.local
+*.local.toml
+
+# ── Logs ──
+*.log
+logs/
+
+# ── Database ──
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+!connectalso.db.backup
+
+# ── Fuzz ──
+fuzz/artifacts/
+fuzz/corpus/
+
+# ── Coverage ──
+*.profraw
+*.profdata
+/coverage/
+tarpaulin-report.html
+
+# ── Misc ──
+*.orig
+*.tmp
+temp/
+tmp/
