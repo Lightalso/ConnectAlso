@@ -5,13 +5,16 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.DatagramSocket
-import java.net.InetSocketAddress
 import kotlin.concurrent.thread
 
 /**
@@ -63,6 +66,8 @@ class ConnectAlsoVpnService : VpnService() {
     private var tunFd: ParcelFileDescriptor? = null
     private var running = false
     private var relaySocket: DatagramSocket? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -126,6 +131,9 @@ class ConnectAlsoVpnService : VpnService() {
         running = true
         updateNotification("Connected — $virtualIp")
 
+        // Register network change listener
+        registerNetworkCallback()
+
         // Start packet forwarding threads
         startPacketForwarding()
 
@@ -134,6 +142,9 @@ class ConnectAlsoVpnService : VpnService() {
 
     private fun stopVpn() {
         running = false
+
+        // Unregister network callback
+        unregisterNetworkCallback()
 
         RustBridge.shutdown()
 
@@ -235,5 +246,56 @@ class ConnectAlsoVpnService : VpnService() {
     private fun updateNotification(text: String) {
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(text))
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Network change detection (Wi-Fi ↔ Cellular)
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun registerNetworkCallback() {
+        connectivityManager = getSystemService(ConnectivityManager::class.java)
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                Log.i(TAG, "network available")
+                triggerReconnect()
+            }
+
+            override fun onLost(network: Network) {
+                Log.w(TAG, "network lost")
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities
+            ) {
+                // Detect Wi-Fi ↔ Cellular switch
+                val hasWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                val hasCellular = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                Log.i(TAG, "capabilities changed — wifi=$hasWifi cellular=$hasCellular")
+                triggerReconnect()
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        connectivityManager?.registerNetworkCallback(request, networkCallback!!)
+        Log.i(TAG, "network callback registered")
+    }
+
+    private fun unregisterNetworkCallback() {
+        networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
+        networkCallback = null
+        Log.i(TAG, "network callback unregistered")
+    }
+
+    private fun triggerReconnect() {
+        if (!running) return
+        thread(name = "ConnectAlso-reconnect") {
+            Log.i(TAG, "triggering reconnect...")
+            val ok = RustBridge.reconnect()
+            Log.i(TAG, "reconnect result: $ok")
+        }
     }
 }

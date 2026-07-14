@@ -127,7 +127,23 @@ pub extern "C" fn connectalso_recv_packet(
 #[no_mangle]
 pub extern "C" fn connectalso_shutdown() {
     tracing::info!("iOS engine shutting down");
-    // Resources are freed when the static ENGINE is dropped
+}
+
+/// Trigger reconnection after a network change (Wi-Fi ↔ Cellular).
+///
+/// This re-registers with the control service, refreshes the peer list,
+/// re-connects relay sessions, and flushes queued outbound packets.
+///
+/// Returns 0 on success, -1 on error.
+#[no_mangle]
+pub extern "C" fn connectalso_reconnect() -> i32 {
+    match runtime().block_on(engine::engine_reconnect()) {
+        Ok(()) => 0,
+        Err(e) => {
+            tracing::error!(%e, "reconnect failed");
+            -1
+        }
+    }
 }
 
 /// Return the virtual IP assigned to this device.

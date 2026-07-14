@@ -180,3 +180,25 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_shutdown(
 ) {
     tracing::info!("Android engine shutting down");
 }
+
+/// Trigger reconnection after a network change.
+///
+/// Java signature:
+///   native boolean reconnect();
+///
+/// Call this when the device switches between Wi-Fi and Cellular.
+/// Re-registers with control service, refreshes peers, and re-connects
+/// relay sessions. Queued outbound packets are flushed automatically.
+#[no_mangle]
+pub extern "system" fn Java_com_connectalso_mobile_RustBridge_reconnect(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jboolean {
+    match engine::RUNTIME.block_on(engine::engine_reconnect()) {
+        Ok(()) => jboolean::from(true),
+        Err(e) => {
+            tracing::error!(%e, "reconnect failed");
+            jboolean::from(false)
+        }
+    }
+}

@@ -1,4 +1,5 @@
 import NetworkExtension
+import Network
 import os.log
 
 /// ConnectAlso Packet Tunnel Provider for iOS
@@ -28,6 +29,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private let log = OSLog(subsystem: "com.connectalso.ios", category: "tunnel")
     private var readLoopActive = false
+    private var pathMonitor: NWPathMonitor?
+    private let monitorQueue = DispatchQueue(label: "com.connectalso.network-monitor")
 
     // ── Configuration (set by the container app via protocolConfiguration) ──
 
@@ -82,6 +85,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             }
 
             os_log("Tunnel configured (VIP: %{public}@)", log: self?.log ?? .default, type: .info, vip)
+            self?.startNetworkMonitor()
             self?.startPacketLoop()
             completionHandler(nil)
         }
@@ -177,5 +181,32 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             return String(cString: buf)
         }
         return "100.64.0.1"
+    }
+
+    // ── Network path monitoring (Wi-Fi ↔ Cellular) ──
+
+    private func startNetworkMonitor() {
+        pathMonitor = NWPathMonitor()
+        pathMonitor?.pathUpdateHandler = { [weak self] path in
+            let iface = path.availableInterfaces.first?.name ?? "unknown"
+            let isExpensive = path.isExpensive // true = cellular
+            os_log("Network changed: %{public}@ (expensive=%{public}@)",
+                   log: self?.log ?? .default, type: .info, iface, isExpensive.description)
+
+            // Trigger Rust engine reconnect
+            let result = connectalso_reconnect()
+            if result == 0 {
+                os_log("Reconnect successful", log: self?.log ?? .default, type: .info)
+            } else {
+                os_log("Reconnect failed: %d", log: self?.log ?? .default, type: .error, result)
+            }
+        }
+        pathMonitor?.start(queue: monitorQueue)
+        os_log("Network monitor started", log: log, type: .info)
+    }
+
+    private func stopNetworkMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
     }
 }

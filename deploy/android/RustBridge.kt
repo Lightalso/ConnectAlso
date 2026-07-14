@@ -68,4 +68,11 @@ object RustBridge {
      * Shut down the engine and release resources.
      */
     external fun shutdown()
+
+    /**
+     * Trigger reconnection after a network change (Wi-Fi ↔ Cellular).
+     *
+     * @return true on success
+     */
+    external fun reconnect(): Boolean
 }
