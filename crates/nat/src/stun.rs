@@ -223,3 +223,19 @@ mod tests {
         }
     }
 }
+
+/// Fuzz helper: parse arbitrary bytes as a STUN binding response.
+///
+/// This function is public solely for fuzz testing. It attempts to
+/// parse the input and reports any panics as crashes.
+///
+/// # Safety for fuzzing
+///
+/// This must never panic on any input. All errors must be returned
+/// as `Err` or `None`.
+#[doc(hidden)]
+pub fn fuzz_stun_response(data: &[u8]) {
+    if let Ok((_msg_type, _tx_id, attrs)) = parse_response(data) {
+        let _ = parse_xor_mapped_address(attrs);
+    }
+}

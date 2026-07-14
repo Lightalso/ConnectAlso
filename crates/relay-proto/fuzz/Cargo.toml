@@ -1,0 +1,30 @@
+[package]
+name = "relay-proto-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.connectalso-relay-proto]
+path = ".."
+
+# Prevent this from interfering with workspace builds
+[lib]
+path = "fuzz_targets/dummy.rs"
+
+[[bin]]
+name = "fuzz_frame_decode"
+path = "fuzz_targets/fuzz_frame_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_frame_roundtrip"
+path = "fuzz_targets/fuzz_frame_roundtrip.rs"
+test = false
+doc = false
