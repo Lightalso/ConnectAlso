@@ -264,7 +264,7 @@ pub async fn allocate_ip(pool: &SqlitePool, base: u32, max_offset: u32) -> Optio
 
     if let Some(r) = row {
         sqlx::query("UPDATE ip_pool SET allocated = 1 WHERE ipv4 = ?").bind(&r.ipv4).execute(pool).await.ok();
-        return Some(r.ipv4.parse().ok()?);
+        return r.ipv4.parse().ok();
     }
 
     let used: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool").fetch_one(pool).await.unwrap_or(0);

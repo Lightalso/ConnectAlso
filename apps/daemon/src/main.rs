@@ -585,7 +585,7 @@ async fn handle_status(State(state): State<Arc<Mutex<SharedState>>>) -> Json<Sta
     let s = state.lock().await;
 
     let mut peers = Vec::new();
-    for (_id, link) in &s.peer_links {
+    for link in s.peer_links.values() {
         let lk = link.lock().await;
         let path_str = match lk.path.current_status() {
             PathStatus::Direct => "direct",
@@ -636,7 +636,7 @@ async fn handle_diagnostics(State(state): State<Arc<Mutex<SharedState>>>) -> Jso
 
     // Peer diagnostics
     let mut peers = Vec::new();
-    for (_id, link) in &s.peer_links {
+    for link in s.peer_links.values() {
         let lk = link.lock().await;
         let path_str = match lk.path.current_status() {
             PathStatus::Direct => "direct",

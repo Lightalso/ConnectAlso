@@ -1,3 +1,5 @@
+//! Integration test for NAT traversal: STUN discovery, candidate exchange, hole punching.
+
 use std::net::SocketAddr;
 
 use connectalso_nat::candidate::Candidate;
