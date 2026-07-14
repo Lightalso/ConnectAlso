@@ -158,19 +158,19 @@ async fn e2e_multi_peer_relay() {
     ).await.unwrap();
 
     // A → B
-    peer_a.send(b"A→B").await.unwrap();
+    peer_a.send(b"A->B").await.unwrap();
     let (data, _) = peer_b_to_a.recv().await.unwrap();
-    assert_eq!(&data, b"A→B");
+    assert_eq!(&data, b"A->B");
 
-    // B → C
-    peer_b_to_c.send(b"B→C").await.unwrap();
+    // B -> C
+    peer_b_to_c.send(b"B->C").await.unwrap();
     let (data, _) = peer_c.recv().await.unwrap();
-    assert_eq!(&data, b"B→C");
+    assert_eq!(&data, b"B->C");
 
-    // A → C
-    peer_a_to_c.send(b"A→C direct").await.unwrap();
+    // A -> C
+    peer_a_to_c.send(b"A->C direct").await.unwrap();
     let (data, _) = peer_c_to_a.recv().await.unwrap();
-    assert_eq!(&data, b"A→C direct");
+    assert_eq!(&data, b"A->C direct");
 
     tracing::info!("E2E multi-peer relay: PASS");
 }

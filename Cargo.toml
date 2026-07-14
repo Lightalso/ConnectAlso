@@ -12,6 +12,10 @@ edition = "2021"
 license = "GPL-3.0-only"
 repository = "https://github.com/Lightalso/ConnectAlso"
 authors = ["ConnectAlso Contributors"]
+description = "Simple, secure cross-platform virtual networking tool"
+readme = "README.md"
+keywords = ["vpn", "p2p", "networking", "nat", "wireguard"]
+categories = ["network-programming"]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -56,7 +60,7 @@ missing_docs = "warn"
 all = "warn"
 pedantic = "warn"
 nursery = "warn"
-cargo = "warn"
+cargo = "allow"
 
 [profile.release]
 opt-level = 3

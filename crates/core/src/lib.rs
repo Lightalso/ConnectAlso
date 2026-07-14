@@ -1,3 +1,8 @@
+//! ConnectAlso common types, configuration and protocol definitions.
+//!
+//! This crate provides shared types used across all other ConnectAlso crates,
+//! including ACL rule evaluation and packet parsing utilities.
+
 use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
@@ -14,23 +19,23 @@ pub struct DnsRecord {
 /// An ACL rule for packet filtering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AclRule {
-    /// Rule priority (lower = higher priority)
+    /// Rule priority (lower = higher priority).
     pub priority: u32,
-    /// Action: "allow" or "deny"
+    /// Action: "allow" or "deny".
     pub action: String,
-    /// Source virtual IP (optional, empty = any)
+    /// Source virtual IP (optional, empty = any).
     #[serde(default)]
     pub src_ip: String,
-    /// Destination virtual IP (optional, empty = any)
+    /// Destination virtual IP (optional, empty = any).
     #[serde(default)]
     pub dst_ip: String,
-    /// Protocol: "tcp", "udp", "icmp", or "" for any
+    /// Protocol: "tcp", "udp", "icmp", or "" for any.
     #[serde(default)]
     pub protocol: String,
-    /// Source port (0 = any)
+    /// Source port (0 = any).
     #[serde(default)]
     pub src_port: u16,
-    /// Destination port (0 = any)
+    /// Destination port (0 = any).
     #[serde(default)]
     pub dst_port: u16,
 }
@@ -38,10 +43,15 @@ pub struct AclRule {
 /// An IP packet header parsed for ACL matching.
 #[derive(Debug)]
 pub struct PacketInfo {
+    /// Source IPv4 address.
     pub src_ip: Ipv4Addr,
+    /// Destination IPv4 address.
     pub dst_ip: Ipv4Addr,
+    /// IP protocol number (6=TCP, 17=UDP, 1=ICMP).
     pub protocol: u8,
+    /// Source port (TCP/UDP only).
     pub src_port: u16,
+    /// Destination port (TCP/UDP only).
     pub dst_port: u16,
 }
 

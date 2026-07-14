@@ -1,5 +1,6 @@
 [licenses]
 # 允许的许可证（全部与 GPLv3 兼容）
+# 未列出的许可证将被拒绝
 allow = [
     "MIT",
     "Apache-2.0",
@@ -18,18 +19,13 @@ exceptions = [
     { name = "tun2", allow = ["WTFPL"] },
 ]
 
-# 禁止的许可证
-deny = [
-    "GPL-2.0-only",
-    "GPL-2.0-or-later",
-    "AGPL-3.0-only",
-    "AGPL-3.0-or-later",
-]
-
 [bans]
+# 禁止同一 crate 的多个版本
 multiple-versions = "deny"
+# 禁止通配符依赖
 wildcards = "deny"
 
 [sources]
+# 只允许 crates.io
 unknown-registry = "deny"
 unknown-git = "deny"
