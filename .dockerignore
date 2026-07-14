@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+target/
+**/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (not needed for build)
+*.md
+!Cargo.toml
+
+# Docker
+deploy/nat-test/
+# Keep deploy/docker/ for the build context

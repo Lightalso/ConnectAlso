@@ -1,0 +1,90 @@
+# ConnectAlso 自建部署
+# =====================
+#
+# 启动:  docker compose up -d
+# 查看:  docker compose logs -f
+# 停止:  docker compose down
+#
+# 服务端口:
+#   3000/tcp   — 控制服务 API
+#   33478/udp  — 流量中继
+#   3478/udp   — STUN 服务
+#   9823/tcp   — 守护进程状态 API (仅本地)
+#
+# 首次部署后访问 http://<IP>:3000/api/v1/health 验证
+
+services:
+  # ── 控制服务 ──
+  control:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: connectalso-control
+    restart: unless-stopped
+    ports:
+      - "${CONTROL_PORT:-3000}:3000"
+    volumes:
+      - connectalso-data:/var/lib/connectalso
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+    command:
+      - connectalso-control
+      - --listen
+      - 0.0.0.0:3000
+      - --db-path
+      - /var/lib/connectalso/control.db
+      - --network
+      - ${CONTROL_NETWORK:-100.64.0.0/16}
+      - --stale-timeout
+      - "${STALE_TIMEOUT:-300}"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - connectalso
+
+  # ── 中继服务 ──
+  relay:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: connectalso-relay
+    restart: unless-stopped
+    ports:
+      - "${RELAY_PORT:-33478}:33478/udp"
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+    command:
+      - connectalso-relay
+      - --listen
+      - 0.0.0.0:33478
+    networks:
+      - connectalso
+
+  # ── STUN 服务 ──
+  stun:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: connectalso-stun
+    restart: unless-stopped
+    ports:
+      - "${STUN_PORT:-3478}:3478/udp"
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+    command:
+      - connectalso-stun
+      - --listen
+      - 0.0.0.0:3478
+    networks:
+      - connectalso
+
+volumes:
+  connectalso-data:
+    driver: local
+
+networks:
+  connectalso:
+    driver: bridge
