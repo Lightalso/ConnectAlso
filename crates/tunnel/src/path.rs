@@ -122,7 +122,7 @@ impl PathManager {
     }
 }
 
-/// A simple ping-pong keepalive probe.
+/// A keepalive ping-pong probe for tunnel health checking.
 ///
 /// Sends a "PING" and expects a "PONG" within the timeout.
 pub async fn ping_pong(tunnel: &mut Tunnel, peer: SocketAddr, timeout: Duration) -> Result<(), TunnelError> {

@@ -71,14 +71,14 @@ async fn full_stun_candidate_punch_flow() {
     // --- Peer A: STUN discover then punch ---
     let sock_a = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
     let client_a = StunClient::from_socket(sock_a);
-    let public_a = client_a.discover(stun_addr).await.unwrap();
+    let _public_a = client_a.discover(stun_addr).await.unwrap();
     let sock_a = client_a.into_socket();
     let peer_a = Puncher::from_socket(sock_a);
 
     // --- Peer B: STUN discover then punch ---
     let sock_b = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
     let client_b = StunClient::from_socket(sock_b);
-    let public_b = client_b.discover(stun_addr).await.unwrap();
+    let _public_b = client_b.discover(stun_addr).await.unwrap();
     let sock_b = client_b.into_socket();
     let peer_b = Puncher::from_socket(sock_b);
 

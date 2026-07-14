@@ -5,13 +5,13 @@ use uuid::Uuid;
 /// device's public key fingerprint.
 pub type PeerId = Uuid;
 
-/// Protocol version byte.
+/// Current protocol version byte.
 pub const PROTO_VERSION: u8 = 0x01;
 
 /// Maximum payload size for a single relayed DATA frame.
 pub const MAX_PAYLOAD: usize = 2048;
 
-/// Full frame header size: version(1) + type(1) + sender(16) + target(16) + len(2) = 36
+/// Total header size: version(1) + type(1) + sender(16) + target(16) + len(2).
 pub const HEADER_LEN: usize = 1 + 1 + 16 + 16 + 2;
 
 /// Relay protocol errors.

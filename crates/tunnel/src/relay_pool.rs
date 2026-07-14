@@ -1,10 +1,6 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use connectalso_relay_proto::PeerId;
-
-use crate::relay::RelayClient;
-
 /// A relay server with latency tracking.
 #[derive(Debug, Clone)]
 pub struct RelayServer {

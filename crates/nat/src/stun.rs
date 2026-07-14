@@ -187,7 +187,7 @@ mod tests {
     #[tokio::test]
     async fn decode_success_response() {
         let client = StunClient::bind().await.unwrap();
-        let client_addr = client.socket.local_addr().unwrap();
+        let _client_addr = client.local_addr().unwrap();
         let tx_id: [u8; 12] = rand::thread_rng().gen();
 
         let mapped = "1.2.3.4:5678".parse::<SocketAddr>().unwrap();

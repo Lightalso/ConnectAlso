@@ -10,8 +10,11 @@ const RESPONDER_TX_OFFSET: u64 = 1u64 << 32;
 
 const MAX_PACKET: usize = 65536;
 
+/// Path management with P2P direct + relay fallback.
 pub mod path;
+/// Relay client for sending encrypted data through relay servers.
 pub mod relay;
+/// Multi-region relay pool with automatic failover.
 pub mod relay_pool;
 
 /// Tunnel operation errors.
@@ -148,7 +151,8 @@ mod tests {
         let bob_keys = KeyPair::generate();
         let eve_keys = KeyPair::generate();
         let shared = alice_keys.diffie_hellman(&bob_keys.public_key_bytes());
-        let eve_shared = alice_keys.diffie_hellman(&eve_keys.public_key_bytes());
+        let alice_for_eve = KeyPair::generate();
+        let eve_shared = alice_for_eve.diffie_hellman(&eve_keys.public_key_bytes());
 
         let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
         let eve = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &eve_shared).await.unwrap();

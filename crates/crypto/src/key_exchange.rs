@@ -43,8 +43,10 @@ impl KeyPair {
     }
 
     /// Perform Diffie-Hellman to derive a shared secret with a peer.
+    ///
+    /// Consumes the key pair (ephemeral secret is single-use).
     #[must_use]
-    pub fn diffie_hellman(&self, peer_public: &[u8; KEY_LEN]) -> [u8; KEY_LEN] {
+    pub fn diffie_hellman(self, peer_public: &[u8; KEY_LEN]) -> [u8; KEY_LEN] {
         let peer_key = PublicKey::from(*peer_public);
         let shared = self.secret.diffie_hellman(&peer_key);
         *shared.as_bytes()
@@ -116,8 +118,11 @@ mod tests {
         let alice = KeyPair::generate();
         let bob = KeyPair::generate();
 
-        let alice_shared = alice.diffie_hellman(&bob.public_key_bytes());
-        let bob_shared = bob.diffie_hellman(&alice.public_key_bytes());
+        let alice_pub = alice.public_key_bytes();
+        let bob_pub = bob.public_key_bytes();
+
+        let alice_shared = alice.diffie_hellman(&bob_pub);
+        let bob_shared = bob.diffie_hellman(&alice_pub);
         assert_eq!(alice_shared, bob_shared);
 
         // Alice sends, Bob receives (different nonce starting points)
@@ -136,8 +141,10 @@ mod tests {
         let bob = KeyPair::generate();
         let eve = KeyPair::generate();
 
-        let alice_shared = alice.diffie_hellman(&bob.public_key_bytes());
-        let eve_shared = eve.diffie_hellman(&bob.public_key_bytes());
+        let bob_pub = bob.public_key_bytes();
+
+        let alice_shared = alice.diffie_hellman(&bob_pub);
+        let eve_shared = eve.diffie_hellman(&bob_pub);
 
         let mut alice_tx = SessionCipher::new(&alice_shared, 0);
         let eve_rx = SessionCipher::new(&eve_shared, 0);

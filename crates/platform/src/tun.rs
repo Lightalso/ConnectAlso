@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
 
+use thiserror::Error;
 use tun2::{create_as_async, AsyncDevice, Configuration, Layer};
 
 const DEFAULT_MTU: u16 = 1500;

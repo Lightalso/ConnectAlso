@@ -390,6 +390,7 @@ struct IpPoolRow {
 
 // ── ACL ──
 
+/// A database row representing an ACL rule.
 #[derive(sqlx::FromRow)]
 pub struct AclRuleRow {
     pub id: i64,
