@@ -223,6 +223,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/candidates/{device_id}", get(handle_get_candidates))
         .route("/api/v1/backup", post(handle_backup))
         .route("/api/v1/restore", post(handle_restore))
+        .route("/api/v1/dns", get(handle_dns_records))
+        .route("/api/v1/acl", get(handle_list_acl))
+        .route("/api/v1/acl", post(handle_upsert_acl))
+        .route("/api/v1/acl/{id}", delete(handle_delete_acl))
         .with_state(state);
 
     tracing::info!("Control service listening on {}", cli.listen);
@@ -485,6 +489,69 @@ async fn handle_restore(
             Ok(Json(RestoreResponse { success: false }))
         }
     }
+}
+
+// ── DNS ──
+
+async fn handle_dns_records(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let records = db::list_dns_records(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let list: Vec<serde_json::Value> = records
+        .into_iter()
+        .map(|(hostname, ipv4)| serde_json::json!({"hostname": hostname, "ipv4": ipv4}))
+        .collect();
+
+    Ok(Json(serde_json::json!({"records": list})))
+}
+
+// ── ACL ──
+
+async fn handle_list_acl(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let rules = db::list_acl_rules(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let list: Vec<serde_json::Value> = rules
+        .into_iter()
+        .map(|r| serde_json::json!({
+            "id": r.id,
+            "priority": r.priority,
+            "action": r.action,
+            "src_ip": r.src_ip,
+            "dst_ip": r.dst_ip,
+            "protocol": r.protocol,
+            "src_port": r.src_port,
+            "dst_port": r.dst_port,
+        }))
+        .collect();
+
+    Ok(Json(serde_json::json!({"rules": list})))
+}
+
+async fn handle_upsert_acl(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<db::AclRuleRow>,
+) -> Result<StatusCode, StatusCode> {
+    db::upsert_acl_rule(&state.db, &req)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
+async fn handle_delete_acl(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    db::delete_acl_rule(&state.db, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
 }
 
 fn unix_now() -> i64 {

@@ -94,6 +94,23 @@ pub async fn init_db(path: &str) -> anyhow::Result<SqlitePool> {
     .execute(&pool)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS acl_rules (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            priority   INTEGER NOT NULL DEFAULT 0,
+            action     TEXT NOT NULL DEFAULT 'allow',
+            src_ip     TEXT NOT NULL DEFAULT '',
+            dst_ip     TEXT NOT NULL DEFAULT '',
+            protocol   TEXT NOT NULL DEFAULT '',
+            src_port   INTEGER NOT NULL DEFAULT 0,
+            dst_port   INTEGER NOT NULL DEFAULT 0
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
     tracing::info!("database initialized: {path}");
     Ok(pool)
 }
@@ -402,6 +419,68 @@ impl From<DeviceRow> for DeviceRecord {
 struct IpPoolRow {
     ipv4: String,
     allocated: i64,
+}
+
+// ── ACL ──
+
+#[derive(sqlx::FromRow)]
+pub struct AclRuleRow {
+    pub id: i64,
+    pub priority: i32,
+    pub action: String,
+    pub src_ip: String,
+    pub dst_ip: String,
+    pub protocol: String,
+    pub src_port: i32,
+    pub dst_port: i32,
+}
+
+pub async fn list_acl_rules(pool: &SqlitePool) -> anyhow::Result<Vec<AclRuleRow>> {
+    sqlx::query_as::<_, AclRuleRow>(
+        "SELECT id, priority, action, src_ip, dst_ip, protocol, src_port, dst_port FROM acl_rules ORDER BY priority"
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
+pub async fn upsert_acl_rule(pool: &SqlitePool, rule: &AclRuleRow) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO acl_rules (id, priority, action, src_ip, dst_ip, protocol, src_port, dst_port)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+            priority=excluded.priority, action=excluded.action,
+            src_ip=excluded.src_ip, dst_ip=excluded.dst_ip,
+            protocol=excluded.protocol, src_port=excluded.src_port, dst_port=excluded.dst_port"
+    )
+    .bind(rule.id)
+    .bind(rule.priority)
+    .bind(&rule.action)
+    .bind(&rule.src_ip)
+    .bind(&rule.dst_ip)
+    .bind(&rule.protocol)
+    .bind(rule.src_port)
+    .bind(rule.dst_port)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_acl_rule(pool: &SqlitePool, id: i64) -> anyhow::Result<bool> {
+    let rows = sqlx::query("DELETE FROM acl_rules WHERE id = ?")
+        .bind(id).execute(pool).await?;
+    Ok(rows.rows_affected() > 0)
+}
+
+// ── DNS ──
+
+pub async fn list_dns_records(pool: &SqlitePool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT hostname, ipv4 FROM devices WHERE status = 1 AND hostname != '' AND ipv4 != ''"
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
 
 fn unix_now() -> i64 {

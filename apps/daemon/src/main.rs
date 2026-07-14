@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+mod dns;
+
 use anyhow::Context;
 use axum::extract::State;
 use axum::routing::{get, post};
@@ -707,3 +709,4 @@ async fn check_udp(server: Option<SocketAddr>, probe: &[u8]) -> (&'static str, S
         Err(e) => ("error", format!("{e}"), None),
     }
 }
+pub mod dns;
