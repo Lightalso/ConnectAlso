@@ -39,6 +39,7 @@ dirs = "6"
 tracing-appender = "0.2"
 tray-icon = "0.14"
 muda = "0.15"
+jni = { version = "0.21", features = ["invocation"] }
 
 connectalso-core = { path = "crates/core" }
 connectalso-crypto = { path = "crates/crypto" }

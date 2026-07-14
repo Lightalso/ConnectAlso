@@ -9,8 +9,11 @@ use connectalso_crypto::key_exchange::KeyPair;
 use connectalso_relay_proto::PeerId;
 use connectalso_tunnel::relay::RelayClient;
 use serde::Deserialize;
+use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+
+pub(crate) static RUNTIME: std::sync::OnceLock<Runtime> = std::sync::OnceLock::new();
 
 /// Persistent state for the mobile tunnel engine.
 struct TunnelEngine {
