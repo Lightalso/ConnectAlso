@@ -105,7 +105,7 @@ impl Puncher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::candidate::{Candidate, CandidateType};
+    use crate::candidate::Candidate;
 
     #[tokio::test]
     async fn hole_punch_simulation() {
@@ -156,10 +156,9 @@ mod tests {
         let b_addr = peer_b.local_addr().unwrap();
 
         // Punch holes
-        let (a_res, b_res) = tokio::join!(
-            peer_a.punch(&[Candidate::host(b_addr)], b"ping"),
-            peer_b.punch(&[Candidate::host(a_addr)], b"pong"),
-        );
+        let a_cands = [Candidate::host(b_addr)];
+        let b_cands = [Candidate::host(a_addr)];
+        let (a_res, b_res) = tokio::join!(peer_a.punch(&a_cands, b"ping"), peer_b.punch(&b_cands, b"pong"),);
         assert!(a_res.unwrap().is_some());
         assert!(b_res.unwrap().is_some());
 

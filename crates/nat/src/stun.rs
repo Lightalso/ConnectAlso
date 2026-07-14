@@ -152,10 +152,18 @@ fn parse_xor_mapped_address(attrs: &[u8]) -> Option<SocketAddr> {
     None
 }
 
+/// Fuzz helper: parse arbitrary bytes as a STUN binding response.
+#[doc(hidden)]
+pub fn fuzz_stun_response(data: &[u8]) {
+    if let Ok((_msg_type, _tx_id, attrs)) = parse_response(data) {
+        let _ = parse_xor_mapped_address(attrs);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{Ipv4Addr, SocketAddr};
+    use std::net::SocketAddr;
 
     fn build_success_response(tx_id: &[u8; 12], mapped: SocketAddr) -> Vec<u8> {
         // XOR-MAPPED-ADDRESS attribute
@@ -215,21 +223,5 @@ mod tests {
             let parsed = parse_xor_mapped_address(attrs).unwrap();
             assert_eq!(parsed, addr, "roundtrip failed for {addr}");
         }
-    }
-}
-
-/// Fuzz helper: parse arbitrary bytes as a STUN binding response.
-///
-/// This function is public solely for fuzz testing. It attempts to
-/// parse the input and reports any panics as crashes.
-///
-/// # Safety for fuzzing
-///
-/// This must never panic on any input. All errors must be returned
-/// as `Err` or `None`.
-#[doc(hidden)]
-pub fn fuzz_stun_response(data: &[u8]) {
-    if let Ok((_msg_type, _tx_id, attrs)) = parse_response(data) {
-        let _ = parse_xor_mapped_address(attrs);
     }
 }

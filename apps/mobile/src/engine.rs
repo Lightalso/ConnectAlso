@@ -54,10 +54,10 @@ impl ActivityLevel {
 }
 
 /// Persistent state for the mobile tunnel engine.
-struct TunnelEngine {
-    keypair: KeyPair,
-    our_id: Uuid,
-    our_ip: Ipv4Addr,
+pub(crate) struct TunnelEngine {
+    pub(crate) keypair: KeyPair,
+    pub(crate) our_id: Uuid,
+    pub(crate) our_ip: Ipv4Addr,
     relay_server: SocketAddr,
     peers: HashMap<Uuid, PeerState>,
     http: reqwest::Client,

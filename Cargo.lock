@@ -577,6 +577,7 @@ dependencies = [
  "connectalso-relay-proto",
  "connectalso-tunnel",
  "jni",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",

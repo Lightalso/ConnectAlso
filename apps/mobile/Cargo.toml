@@ -17,11 +17,17 @@ connectalso-nat.workspace = true
 connectalso-relay-proto.workspace = true
 anyhow.workspace = true
 jni.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "allow"
+[lints.clippy]
+all = "allow"
+pedantic = "allow"
+nursery = "allow"

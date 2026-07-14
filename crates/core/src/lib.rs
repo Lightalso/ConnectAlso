@@ -189,6 +189,6 @@ mod tests {
     fn acl_allow_default() {
         let rules: Vec<AclRule> = vec![];
         let pkt = vec![0u8; 40];
-        assert_eq!(evaluate_acls(&pkt), "allow");
+        assert_eq!(evaluate_acls(&rules, &pkt), "allow");
     }
 }

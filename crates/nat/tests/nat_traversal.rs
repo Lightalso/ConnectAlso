@@ -12,14 +12,9 @@ async fn spawn_stun_server() -> SocketAddr {
 
     tokio::spawn(async move {
         let mut buf = [0u8; 512];
-        loop {
-            match socket.recv_from(&mut buf).await {
-                Ok((n, client)) => {
-                    if let Some(rsp) = stun_response(&buf[..n], client) {
-                        let _ = socket.send_to(&rsp, client).await;
-                    }
-                }
-                Err(_) => break,
+        while let Ok((n, client)) = socket.recv_from(&mut buf).await {
+            if let Some(rsp) = stun_response(&buf[..n], client) {
+                let _ = socket.send_to(&rsp, client).await;
             }
         }
     });

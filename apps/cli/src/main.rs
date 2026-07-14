@@ -182,7 +182,7 @@ async fn cmd_status(daemon_url: &str, verbose: bool) -> anyhow::Result<()> {
             if !s.peers.is_empty() {
                 println!();
                 if verbose {
-                    println!("  {:<16}  {:<16}  {:<10}  {}", "PEER", "VIRTUAL IP", "PATH", "HOSTNAME");
+                    println!("  {:<16}  {:<16}  {:<10}  HOSTNAME", "PEER", "VIRTUAL IP", "PATH");
                     println!("  {}", "-".repeat(64));
                     for p in &s.peers {
                         println!(
@@ -194,7 +194,7 @@ async fn cmd_status(daemon_url: &str, verbose: bool) -> anyhow::Result<()> {
                         );
                     }
                 } else {
-                    println!("  {:<20}  {:<16}  {}", "PEER", "VIRTUAL IP", "HOSTNAME");
+                    println!("  {:<20}  {:<16}  HOSTNAME", "PEER", "VIRTUAL IP");
                     println!("  {}", "-".repeat(58));
                     for p in &s.peers {
                         println!(
@@ -361,7 +361,7 @@ async fn cmd_admin_peers(control_url: &str) -> anyhow::Result<()> {
     let empty_arr = vec![];
     let peers = resp["peers"].as_array().unwrap_or(&empty_arr);
     println!("All devices ({})", peers.len());
-    println!("  {:<38}  {:<16}  {:<12}  {}", "DEVICE ID", "IP", "STATUS", "HOSTNAME");
+    println!("  {:<38}  {:<16}  {:<12}  HOSTNAME", "DEVICE ID", "IP", "STATUS");
     for d in peers {
         println!(
             "  {:<38}  {:<16}  {:<12}  {}",

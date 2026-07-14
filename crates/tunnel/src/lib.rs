@@ -178,7 +178,7 @@ mod tests {
         let shared = alice_keys.diffie_hellman(&bob_keys.public_key_bytes());
 
         let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
-        let mut bob = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
+        let bob = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
 
         let bob_addr = bob.local_addr().unwrap();
 
