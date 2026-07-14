@@ -39,19 +39,13 @@ pub struct Tunnel {
 impl Tunnel {
     /// Bind to a local UDP address and initialise the tunnel as the
     /// **initiator** (send nonces start at 0).
-    pub async fn bind_initiator(
-        local_addr: SocketAddr,
-        shared_secret: &[u8; 32],
-    ) -> Result<Self, TunnelError> {
+    pub async fn bind_initiator(local_addr: SocketAddr, shared_secret: &[u8; 32]) -> Result<Self, TunnelError> {
         Self::bind_with_nonce(local_addr, shared_secret, 0).await
     }
 
     /// Bind to a local UDP address and initialise the tunnel as the
     /// **responder** (send nonces start at `RESPONDER_TX_OFFSET`).
-    pub async fn bind_responder(
-        local_addr: SocketAddr,
-        shared_secret: &[u8; 32],
-    ) -> Result<Self, TunnelError> {
+    pub async fn bind_responder(local_addr: SocketAddr, shared_secret: &[u8; 32]) -> Result<Self, TunnelError> {
         Self::bind_with_nonce(local_addr, shared_secret, RESPONDER_TX_OFFSET).await
     }
 
@@ -66,11 +60,7 @@ impl Tunnel {
         let tx_cipher = SessionCipher::new(shared_secret, tx_nonce_start);
         let rx_cipher = SessionCipher::new(shared_secret, 0);
 
-        Ok(Self {
-            socket,
-            tx_cipher,
-            rx_cipher,
-        })
+        Ok(Self { socket, tx_cipher, rx_cipher })
     }
 
     /// Return the local socket address.
@@ -82,11 +72,7 @@ impl Tunnel {
     /// Encrypt `plaintext` and send it to `peer`.
     ///
     /// Returns the number of plaintext bytes sent.
-    pub async fn send_to(
-        &mut self,
-        plaintext: &[u8],
-        peer: SocketAddr,
-    ) -> Result<usize, TunnelError> {
+    pub async fn send_to(&mut self, plaintext: &[u8], peer: SocketAddr) -> Result<usize, TunnelError> {
         let packet = self.tx_cipher.encrypt(plaintext)?;
         let sent = self.socket.send_to(&packet, peer).await?;
         tracing::debug!(
@@ -135,12 +121,8 @@ mod tests {
         let bob_keys = KeyPair::generate();
         let shared = alice_keys.diffie_hellman(&bob_keys.public_key_bytes());
 
-        let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared)
-            .await
-            .unwrap();
-        let mut bob = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &shared)
-            .await
-            .unwrap();
+        let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
+        let mut bob = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
 
         let bob_addr = bob.local_addr().unwrap();
         let alice_addr = alice.local_addr().unwrap();
@@ -168,12 +150,8 @@ mod tests {
         let shared = alice_keys.diffie_hellman(&bob_keys.public_key_bytes());
         let eve_shared = alice_keys.diffie_hellman(&eve_keys.public_key_bytes());
 
-        let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared)
-            .await
-            .unwrap();
-        let eve = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &eve_shared)
-            .await
-            .unwrap();
+        let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
+        let eve = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &eve_shared).await.unwrap();
 
         let eve_addr = eve.local_addr().unwrap();
 
@@ -191,12 +169,8 @@ mod tests {
         let bob_keys = KeyPair::generate();
         let shared = alice_keys.diffie_hellman(&bob_keys.public_key_bytes());
 
-        let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared)
-            .await
-            .unwrap();
-        let mut bob = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &shared)
-            .await
-            .unwrap();
+        let mut alice = Tunnel::bind_initiator("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
+        let mut bob = Tunnel::bind_responder("127.0.0.1:0".parse().unwrap(), &shared).await.unwrap();
 
         let bob_addr = bob.local_addr().unwrap();
 

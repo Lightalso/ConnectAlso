@@ -5,9 +5,7 @@ use connectalso_nat::punch::Puncher;
 use connectalso_nat::stun::StunClient;
 
 async fn spawn_stun_server() -> SocketAddr {
-    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
-        .await
-        .expect("bind stun");
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.expect("bind stun");
     let addr = socket.local_addr().unwrap();
 
     tokio::spawn(async move {
@@ -92,10 +90,8 @@ async fn full_stun_candidate_punch_flow() {
     let b_candidates = vec![Candidate::host(a_host)];
 
     // Simultaneous hole punching
-    let (a_res, b_res) = tokio::join!(
-        peer_a.punch(&a_candidates, b"token-a"),
-        peer_b.punch(&b_candidates, b"token-b"),
-    );
+    let (a_res, b_res) =
+        tokio::join!(peer_a.punch(&a_candidates, b"token-a"), peer_b.punch(&b_candidates, b"token-b"),);
 
     let a_rsp = a_res.unwrap();
     let b_rsp = b_res.unwrap();

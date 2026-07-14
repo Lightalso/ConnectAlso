@@ -23,10 +23,10 @@ use connectalso_tunnel::relay_pool::RelayPool;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 // ═══════════════════════════════════════════════════════════════════
@@ -47,9 +47,7 @@ struct DaemonConfig {
 
 impl DaemonConfig {
     fn path() -> PathBuf {
-        let base = dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("connectalso");
+        let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("connectalso");
         std::fs::create_dir_all(&base).ok();
         base.join("config.json")
     }
@@ -85,7 +83,9 @@ struct RegisterResponse {
     status: String,
 }
 
-fn default_status() -> String { "approved".to_string() }
+fn default_status() -> String {
+    "approved".to_string()
+}
 
 #[derive(Debug, Deserialize, Clone)]
 struct PeerInfo {
@@ -221,26 +221,15 @@ struct Cli {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // ── Logging: console + file ──
-    let log_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("connectalso")
-        .join("logs");
+    let log_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from(".")).join("connectalso").join("logs");
     std::fs::create_dir_all(&log_dir).ok();
 
     let file_appender = tracing_appender::rolling::daily(&log_dir, "daemon.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing_subscriber::registry()
-        .with(
-            Layer::new()
-                .with_writer(non_blocking)
-                .with_ansi(false),
-        )
-        .with(
-            Layer::new()
-                .with_writer(std::io::stderr)
-                .with_filter(EnvFilter::from_default_env()),
-        )
+        .with(Layer::new().with_writer(non_blocking).with_ansi(false))
+        .with(Layer::new().with_writer(std::io::stderr).with_filter(EnvFilter::from_default_env()))
         .init();
 
     // Keep _guard alive for the duration of the program
@@ -259,7 +248,10 @@ async fn main() -> anyhow::Result<()> {
     let reg: RegisterResponse = http
         .post(format!("{}/api/v1/register", cli.control_url))
         .json(&RegisterRequest { public_key: pubkey, hostname: cli.hostname.clone() })
-        .send().await?.json().await?;
+        .send()
+        .await?
+        .json()
+        .await?;
 
     let our_id = reg.device_id;
     let our_ip: Ipv4Addr = reg.ipv4.parse()?;
@@ -269,12 +261,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     DaemonConfig {
-        device_id: our_id, public_key_hex: hex_encode(&pubkey),
+        device_id: our_id,
+        public_key_hex: hex_encode(&pubkey),
         virtual_ip: our_ip.to_string(),
-        control_url: cli.control_url.clone(), stun_server: cli.stun_server.to_string(),
+        control_url: cli.control_url.clone(),
+        stun_server: cli.stun_server.to_string(),
         relay_servers: cli.relay_servers.iter().map(|a| a.to_string()).collect(),
         hostname: cli.hostname.clone(),
-    }.save();
+    }
+    .save();
 
     // ── Relay pool ──
     let mut relay_pool = RelayPool::new(&cli.relay_servers);
@@ -286,14 +281,13 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Initial peer sync ──
     let our_relay_id = PeerId::from_bytes(our_id.into_bytes());
-    let (ip_route, peer_links) = connect_peers(
-        &http, &cli.control_url, relay_pool.active_addr(), our_id, our_relay_id,
-    ).await?;
+    let (ip_route, peer_links) =
+        connect_peers(&http, &cli.control_url, relay_pool.active_addr(), our_id, our_relay_id).await?;
 
     // ── TUN ──
-    let tun = TunDevice::create(
-        TunConfig::new(our_ip, Ipv4Addr::new(255, 255, 255, 0)).with_name(&cli.tun_name),
-    ).await.context("create TUN")?;
+    let tun = TunDevice::create(TunConfig::new(our_ip, Ipv4Addr::new(255, 255, 255, 0)).with_name(&cli.tun_name))
+        .await
+        .context("create TUN")?;
     let tun = Arc::new(tun);
     tracing::info!(name = tun.name(), vip = %tun.address(), "TUN up");
 
@@ -302,8 +296,12 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Shared state ──
     let state = Arc::new(Mutex::new(SharedState {
-        device_id: our_id, virtual_ip: our_ip, hostname: cli.hostname.clone(),
-        started_at: Instant::now(), ip_route, peer_links,
+        device_id: our_id,
+        virtual_ip: our_ip,
+        hostname: cli.hostname.clone(),
+        started_at: Instant::now(),
+        ip_route,
+        peer_links,
     }));
 
     // ── Status API ──
@@ -317,9 +315,12 @@ async fn main() -> anyhow::Result<()> {
             .route("/shutdown", post(handle_shutdown))
             .with_state(api_state);
         let listener = tokio::net::TcpListener::bind(api_listen).await.unwrap();
-        axum::serve(listener, app).with_graceful_shutdown(async move {
-            shutdown_api.cancelled().await;
-        }).await.ok();
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async move {
+                shutdown_api.cancelled().await;
+            })
+            .await
+            .ok();
     });
 
     // ── Forwarding tasks ──
@@ -459,20 +460,22 @@ async fn discover_candidates(stun_server: SocketAddr) -> Vec<String> {
 }
 
 async fn publish_candidates(http: &reqwest::Client, ctl: &str, id: Uuid, candidates: &[String]) {
-    if candidates.is_empty() { return; }
-    let _ = http.post(format!("{ctl}/api/v1/candidates"))
+    if candidates.is_empty() {
+        return;
+    }
+    let _ = http
+        .post(format!("{ctl}/api/v1/candidates"))
         .json(&CandidatePublish { device_id: id, candidates: candidates.to_vec() })
-        .send().await;
+        .send()
+        .await;
 }
 
 async fn get_peer_candidates(http: &reqwest::Client, ctl: &str, peer_id: Uuid) -> Vec<SocketAddr> {
-    let resp = http.get(format!("{ctl}/api/v1/candidates/{peer_id}"))
-        .send().await;
+    let resp = http.get(format!("{ctl}/api/v1/candidates/{peer_id}")).send().await;
     match resp {
         Ok(r) => {
-            let list: CandidateList = r.json().await.unwrap_or(CandidateList {
-                device_id: peer_id, candidates: vec![],
-            });
+            let list: CandidateList =
+                r.json().await.unwrap_or(CandidateList { device_id: peer_id, candidates: vec![] });
             list.candidates.iter().filter_map(|a| a.parse().ok()).collect()
         }
         Err(_) => vec![],
@@ -480,12 +483,13 @@ async fn get_peer_candidates(http: &reqwest::Client, ctl: &str, peer_id: Uuid) -
 }
 
 async fn connect_peers(
-    http: &reqwest::Client, control_url: &str, relay_addr: SocketAddr,
-    our_id: Uuid, our_relay_id: PeerId,
+    http: &reqwest::Client,
+    control_url: &str,
+    relay_addr: SocketAddr,
+    our_id: Uuid,
+    our_relay_id: PeerId,
 ) -> anyhow::Result<(HashMap<Ipv4Addr, Uuid>, HashMap<Uuid, Arc<Mutex<PeerLink>>>)> {
-    let peers: PeersResponse = http
-        .get(format!("{control_url}/api/v1/peers"))
-        .send().await?.json().await?;
+    let peers: PeersResponse = http.get(format!("{control_url}/api/v1/peers")).send().await?.json().await?;
 
     let mut ip_route = HashMap::new();
     let mut peer_links = HashMap::new();
@@ -494,19 +498,21 @@ async fn connect_peers(
         let vip: Ipv4Addr = p.ipv4.parse()?;
         let peer_relay_id = PeerId::from_bytes(p.device_id.into_bytes());
 
-        let relay = RelayClient::register(
-            "0.0.0.0:0".parse()?, relay_addr, our_relay_id, peer_relay_id,
-        ).await?;
+        let relay = RelayClient::register("0.0.0.0:0".parse()?, relay_addr, our_relay_id, peer_relay_id).await?;
 
-        let path = PathManager::new(relay, SocketAddr::new(
-            std::net::IpAddr::V4(vip), 0,
-        ));
+        let path = PathManager::new(relay, SocketAddr::new(std::net::IpAddr::V4(vip), 0));
 
         ip_route.insert(vip, p.device_id);
-        peer_links.insert(p.device_id, Arc::new(Mutex::new(PeerLink {
-            hostname: p.hostname, vip, public_key: p.public_key, path,
-            p2p_retry_ms: 200,
-        })));
+        peer_links.insert(
+            p.device_id,
+            Arc::new(Mutex::new(PeerLink {
+                hostname: p.hostname,
+                vip,
+                public_key: p.public_key,
+                path,
+                p2p_retry_ms: 200,
+            })),
+        );
     }
 
     Ok((ip_route, peer_links))
@@ -514,8 +520,10 @@ async fn connect_peers(
 
 async fn attempt_p2p_for_all(
     peer_links: &HashMap<Uuid, Arc<Mutex<PeerLink>>>,
-    http: &reqwest::Client, ctl: &str,
-    keypair: &KeyPair, our_relay_id: PeerId,
+    http: &reqwest::Client,
+    ctl: &str,
+    keypair: &KeyPair,
+    our_relay_id: PeerId,
 ) {
     for (_pid, link) in peer_links {
         let mut lk = link.lock().await;
@@ -525,7 +533,9 @@ async fn attempt_p2p_for_all(
 
         // Get peer candidates
         let peer_addrs = get_peer_candidates(http, ctl, _pid).await;
-        if peer_addrs.is_empty() { continue; }
+        if peer_addrs.is_empty() {
+            continue;
+        }
 
         // Try hole punching
         let punch_sock = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
@@ -533,9 +543,7 @@ async fn attempt_p2p_for_all(
             Err(_) => continue,
         };
         let puncher = Puncher::from_socket(punch_sock);
-        let p2p_candidates: Vec<Candidate> = peer_addrs.iter()
-            .map(|a| Candidate::host(*a))
-            .collect();
+        let p2p_candidates: Vec<Candidate> = peer_addrs.iter().map(|a| Candidate::host(*a)).collect();
 
         match puncher.punch(&p2p_candidates, b"connectalso-p2p").await {
             Ok(Some((_payload, _from))) => {
@@ -557,10 +565,14 @@ async fn attempt_p2p_for_all(
 // ═══════════════════════════════════════════════════════════════════
 
 fn parse_dst_ip(packet: &[u8]) -> Option<Ipv4Addr> {
-    if packet.len() < 20 { return None; }
+    if packet.len() < 20 {
+        return None;
+    }
     if packet[0] >> 4 == 4 {
         Some(Ipv4Addr::new(packet[16], packet[17], packet[18], packet[19]))
-    } else { None }
+    } else {
+        None
+    }
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -571,9 +583,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 // Status API
 // ═══════════════════════════════════════════════════════════════════
 
-async fn handle_status(
-    State(state): State<Arc<Mutex<SharedState>>>,
-) -> Json<StatusResponse> {
+async fn handle_status(State(state): State<Arc<Mutex<SharedState>>>) -> Json<StatusResponse> {
     let s = state.lock().await;
 
     let mut peers = Vec::new();
@@ -602,15 +612,11 @@ async fn handle_status(
     })
 }
 
-async fn handle_shutdown(
-    State(_state): State<Arc<Mutex<SharedState>>>,
-) -> Json<ShutdownResponse> {
+async fn handle_shutdown(State(_state): State<Arc<Mutex<SharedState>>>) -> Json<ShutdownResponse> {
     Json(ShutdownResponse { message: "shutdown initiated".into() })
 }
 
-async fn handle_diagnostics(
-    State(state): State<Arc<Mutex<SharedState>>>,
-) -> Json<DiagnosticsResponse> {
+async fn handle_diagnostics(State(state): State<Arc<Mutex<SharedState>>>) -> Json<DiagnosticsResponse> {
     let s = state.lock().await;
     let config = DaemonConfig::load();
 
@@ -622,18 +628,13 @@ async fn handle_diagnostics(
     let (stun_status, stun_detail, stun_latency) =
         check_stun(config.as_ref().and_then(|c| c.stun_server.parse().ok())).await;
 
-        // Check relay (probe all)
-        let (relay_status, relay_detail, relay_latency) =
-            check_udp(config.as_ref()
-                .and_then(|c| c.relay_servers.first())
-                .and_then(|a| a.parse().ok()), b"RELAY_CHECK").await;
+    // Check relay (probe all)
+    let (relay_status, relay_detail, relay_latency) =
+        check_udp(config.as_ref().and_then(|c| c.relay_servers.first()).and_then(|a| a.parse().ok()), b"RELAY_CHECK")
+            .await;
 
     // TUN status
-    let tun_status = CheckResult {
-        status: "ok",
-        detail: format!("VIP: {}", s.virtual_ip),
-        latency_ms: None,
-    };
+    let tun_status = CheckResult { status: "ok", detail: format!("VIP: {}", s.virtual_ip), latency_ms: None };
 
     // Peer diagnostics
     let mut peers = Vec::new();
@@ -653,7 +654,11 @@ async fn handle_diagnostics(
     }
 
     Json(DiagnosticsResponse {
-        daemon: CheckResult { status: "ok", detail: format!("uptime {}s", s.started_at.elapsed().as_secs()), latency_ms: None },
+        daemon: CheckResult {
+            status: "ok",
+            detail: format!("uptime {}s", s.started_at.elapsed().as_secs()),
+            latency_ms: None,
+        },
         control: CheckResult { status: control_status, detail: control_detail, latency_ms: control_latency },
         stun: CheckResult { status: stun_status, detail: stun_detail, latency_ms: stun_latency },
         relay: CheckResult { status: relay_status, detail: relay_detail, latency_ms: relay_latency },
@@ -696,8 +701,7 @@ async fn check_udp(server: Option<SocketAddr>, probe: &[u8]) -> (&'static str, S
         Ok(sock) => {
             let _ = sock.send_to(probe, server).await;
             let mut buf = [0u8; 64];
-            match tokio::time::timeout(std::time::Duration::from_secs(2), sock.recv_from(&mut buf)).await
-            {
+            match tokio::time::timeout(std::time::Duration::from_secs(2), sock.recv_from(&mut buf)).await {
                 Ok(Ok((n, from))) => {
                     let ms = start.elapsed().as_millis() as u64;
                     ("ok", format!("response {n}B from {from}"), Some(ms))

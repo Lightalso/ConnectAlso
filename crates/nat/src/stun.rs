@@ -139,12 +139,7 @@ fn parse_xor_mapped_address(attrs: &[u8]) -> Option<SocketAddr> {
             let port = x_port ^ (MAGIC_COOKIE >> 16) as u16;
 
             // X-Address = address XOR magic cookie
-            let x_addr = u32::from_be_bytes([
-                attrs[pos + 4],
-                attrs[pos + 5],
-                attrs[pos + 6],
-                attrs[pos + 7],
-            ]);
+            let x_addr = u32::from_be_bytes([attrs[pos + 4], attrs[pos + 5], attrs[pos + 6], attrs[pos + 7]]);
             let addr = x_addr ^ MAGIC_COOKIE;
             let ip = std::net::Ipv4Addr::from(addr.to_be_bytes());
 

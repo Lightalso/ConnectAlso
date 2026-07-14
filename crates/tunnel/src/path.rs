@@ -51,13 +51,7 @@ impl PathManager {
     /// Starts in `Relay` mode. Call `try_direct()` to attempt P2P.
     pub fn new(relay: RelayClient, direct_peer: SocketAddr) -> Self {
         let (status_tx, _) = watch::channel(PathStatus::Relay);
-        Self {
-            relay,
-            direct_peer,
-            status: PathStatus::Relay,
-            backoff_ms: INITIAL_RETRY_MS,
-            status_tx,
-        }
+        Self { relay, direct_peer, status: PathStatus::Relay, backoff_ms: INITIAL_RETRY_MS, status_tx }
     }
 
     /// Return a receiver for status change notifications.
@@ -77,10 +71,7 @@ impl PathManager {
     /// Uses a new ephemeral socket for STUN + hole punching.
     /// On success, stores the tunnel and switches to `Direct` mode.
     /// On failure, reschedules with exponential backoff.
-    pub async fn try_direct(
-        &mut self,
-        direct_tunnel: Tunnel,
-    ) -> Result<(), TunnelError> {
+    pub async fn try_direct(&mut self, direct_tunnel: Tunnel) -> Result<(), TunnelError> {
         // Verify connectivity with a probe
         match direct_tunnel.send_to(b"PROBE", self.direct_peer).await {
             Ok(_) => {
@@ -104,10 +95,7 @@ impl PathManager {
     pub async fn send(&mut self, plaintext: &[u8]) -> Result<(), TunnelError> {
         // Always use relay for simplicity; direct is attempted by the
         // daemon-level connection manager that holds the Tunnel separately.
-        self.relay
-            .send(plaintext)
-            .await
-            .map_err(TunnelError::Io)?;
+        self.relay.send(plaintext).await.map_err(TunnelError::Io)?;
         Ok(())
     }
 
@@ -137,37 +125,24 @@ impl PathManager {
 /// A simple ping-pong keepalive probe.
 ///
 /// Sends a "PING" and expects a "PONG" within the timeout.
-pub async fn ping_pong(
-    tunnel: &mut Tunnel,
-    peer: SocketAddr,
-    timeout: Duration,
-) -> Result<(), TunnelError> {
+pub async fn ping_pong(tunnel: &mut Tunnel, peer: SocketAddr, timeout: Duration) -> Result<(), TunnelError> {
     match tokio::time::timeout(timeout, async {
         tunnel.send_to(b"PING", peer).await?;
         let mut buf = [0u8; 4];
         let (received, _from) = tokio::time::timeout(timeout, tunnel.recv_from())
             .await
-            .map_err(|_| TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "pong timeout",
-            )))??;
+            .map_err(|_| TunnelError::Io(std::io::Error::new(std::io::ErrorKind::TimedOut, "pong timeout")))??;
 
         if received.len() >= 4 && &received[..4] == b"PONG" {
             Ok(())
         } else {
-            Err(TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionRefused,
-                "unexpected pong",
-            )))
+            Err(TunnelError::Io(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "unexpected pong")))
         }
     })
     .await
     {
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err(TunnelError::Io(std::io::Error::new(
-            std::io::ErrorKind::TimedOut,
-            "ping timeout",
-        ))),
+        Err(_) => Err(TunnelError::Io(std::io::Error::new(std::io::ErrorKind::TimedOut, "ping timeout"))),
     }
 }

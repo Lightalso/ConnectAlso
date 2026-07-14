@@ -172,9 +172,7 @@ fn parse_cidr(cidr: &str) -> anyhow::Result<(u32, u32)> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let cli = Cli::parse();
     let (ip_base, ip_max_offset) = parse_cidr(&cli.network)?;
@@ -261,15 +259,9 @@ async fn handle_register(
     let device_id = Uuid::new_v4();
     let now = unix_now();
 
-    let ip = db::allocate_ip(&state.db, state.ip_base, state.ip_max_offset)
-        .await
-        .ok_or(StatusCode::CONFLICT)?;
+    let ip = db::allocate_ip(&state.db, state.ip_base, state.ip_max_offset).await.ok_or(StatusCode::CONFLICT)?;
 
-    let status = if is_first_device(&state.db).await {
-        db::DeviceStatus::Approved
-    } else {
-        db::DeviceStatus::Pending
-    };
+    let status = if is_first_device(&state.db).await { db::DeviceStatus::Approved } else { db::DeviceStatus::Pending };
 
     let record = db::DeviceRecord {
         device_id,
@@ -281,9 +273,7 @@ async fn handle_register(
         last_seen: now,
     };
 
-    db::insert_device(&state.db, &record)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    db::insert_device(&state.db, &record).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let status_str = if status == db::DeviceStatus::Approved { "approved" } else { "pending" };
     tracing::info!(%device_id, %ip, %status_str, "device registered");
@@ -297,19 +287,12 @@ async fn handle_register(
 }
 
 async fn is_first_device(pool: &SqlitePool) -> bool {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices")
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices").fetch_one(pool).await.unwrap_or(0);
     count == 0
 }
 
-async fn handle_peers(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<PeersResponse>, StatusCode> {
-    let devices = db::list_approved(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn handle_peers(State(state): State<Arc<AppState>>) -> Result<Json<PeersResponse>, StatusCode> {
+    let devices = db::list_approved(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let now = unix_now();
 
@@ -327,12 +310,8 @@ async fn handle_peers(
     Ok(Json(PeersResponse { peers }))
 }
 
-async fn handle_admin_peers(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let devices = db::list_all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn handle_admin_peers(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let devices = db::list_all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let now = unix_now();
     let peers: Vec<AdminPeerInfo> = devices
@@ -345,7 +324,8 @@ async fn handle_admin_peers(
                 db::DeviceStatus::Approved => "approved",
                 db::DeviceStatus::Pending => "pending",
                 db::DeviceStatus::Revoked => "revoked",
-            }.to_string(),
+            }
+            .to_string(),
             last_seen_secs: now.saturating_sub(d.last_seen),
         })
         .collect();
@@ -357,9 +337,7 @@ async fn handle_heartbeat(
     State(state): State<Arc<AppState>>,
     Json(req): Json<HeartbeatRequest>,
 ) -> Result<Json<HeartbeatResponse>, StatusCode> {
-    let ok = db::heartbeat(&state.db, req.device_id)
-        .await
-        .unwrap_or(false);
+    let ok = db::heartbeat(&state.db, req.device_id).await.unwrap_or(false);
     Ok(Json(HeartbeatResponse { ok }))
 }
 
@@ -367,9 +345,7 @@ async fn handle_unregister(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Json<DeleteResponse>, StatusCode> {
-    let deleted = db::delete_device(&state.db, device_id)
-        .await
-        .unwrap_or(false);
+    let deleted = db::delete_device(&state.db, device_id).await.unwrap_or(false);
 
     if deleted {
         tracing::info!(%device_id, "device unregistered");
@@ -382,17 +358,10 @@ async fn handle_health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
 }
 
-async fn handle_allocations(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<AllocationResponse>, StatusCode> {
+async fn handle_allocations(State(state): State<Arc<AppState>>) -> Result<Json<AllocationResponse>, StatusCode> {
     let total = db::pool_size(&state.db).await;
     let used = db::allocated_count(&state.db).await;
-    Ok(Json(AllocationResponse {
-        total,
-        used,
-        free: total.saturating_sub(used),
-        network: state.network_cidr.clone(),
-    }))
+    Ok(Json(AllocationResponse { total, used, free: total.saturating_sub(used), network: state.network_cidr.clone() }))
 }
 
 async fn handle_publish_candidates(
@@ -400,9 +369,7 @@ async fn handle_publish_candidates(
     Json(req): Json<CandidatePublishRequest>,
 ) -> Result<StatusCode, StatusCode> {
     for addr in &req.candidates {
-        db::upsert_candidate(&state.db, req.device_id, addr)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        db::upsert_candidate(&state.db, req.device_id, addr).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     tracing::debug!(device = %req.device_id, count = req.candidates.len(), "candidates published");
     Ok(StatusCode::OK)
@@ -412,22 +379,15 @@ async fn handle_get_candidates(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Json<CandidateListResponse>, StatusCode> {
-    let candidates = db::get_candidates(&state.db, device_id)
-        .await
-        .map_err(|_| StatusCode::NOT_FOUND)?;
-    Ok(Json(CandidateListResponse {
-        device_id,
-        candidates,
-    }))
+    let candidates = db::get_candidates(&state.db, device_id).await.map_err(|_| StatusCode::NOT_FOUND)?;
+    Ok(Json(CandidateListResponse { device_id, candidates }))
 }
 
 async fn handle_approve(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Json<ApprovalResponse>, StatusCode> {
-    let approved = db::approve_device(&state.db, device_id)
-        .await
-        .unwrap_or(false);
+    let approved = db::approve_device(&state.db, device_id).await.unwrap_or(false);
     if approved {
         tracing::info!(%device_id, "device approved");
     }
@@ -438,38 +398,32 @@ async fn handle_revoke(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<Uuid>,
 ) -> Result<Json<RevokeResponse>, StatusCode> {
-    let revoked = db::revoke_device(&state.db, device_id)
-        .await
-        .unwrap_or(false);
+    let revoked = db::revoke_device(&state.db, device_id).await.unwrap_or(false);
     if revoked {
         tracing::info!(%device_id, "device revoked");
     }
     Ok(Json(RevokeResponse { revoked, device_id }))
 }
 
-async fn handle_pending(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let devices = db::list_pending(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn handle_pending(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let devices = db::list_pending(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let pending: Vec<serde_json::Value> = devices
         .into_iter()
-        .map(|d| serde_json::json!({
-            "device_id": d.device_id.to_string(),
-            "hostname": d.hostname,
-            "ipv4": d.ipv4.to_string(),
-            "created_at": d.created_at,
-        }))
+        .map(|d| {
+            serde_json::json!({
+                "device_id": d.device_id.to_string(),
+                "hostname": d.hostname,
+                "ipv4": d.ipv4.to_string(),
+                "created_at": d.created_at,
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({ "pending": pending })))
 }
 
-async fn handle_backup(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<BackupResponse>, StatusCode> {
+async fn handle_backup(State(state): State<Arc<AppState>>) -> Result<Json<BackupResponse>, StatusCode> {
     match db::create_backup(&state.db_path).await {
         Ok(path) => Ok(Json(BackupResponse { path, success: true })),
         Err(e) => {
@@ -479,9 +433,7 @@ async fn handle_backup(
     }
 }
 
-async fn handle_restore(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<RestoreResponse>, StatusCode> {
+async fn handle_restore(State(state): State<Arc<AppState>>) -> Result<Json<RestoreResponse>, StatusCode> {
     match db::restore_backup(&state.db_path).await {
         Ok(()) => Ok(Json(RestoreResponse { success: true })),
         Err(e) => {
@@ -493,42 +445,34 @@ async fn handle_restore(
 
 // ── DNS ──
 
-async fn handle_dns_records(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let records = db::list_dns_records(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn handle_dns_records(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let records = db::list_dns_records(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let list: Vec<serde_json::Value> = records
-        .into_iter()
-        .map(|(hostname, ipv4)| serde_json::json!({"hostname": hostname, "ipv4": ipv4}))
-        .collect();
+    let list: Vec<serde_json::Value> =
+        records.into_iter().map(|(hostname, ipv4)| serde_json::json!({"hostname": hostname, "ipv4": ipv4})).collect();
 
     Ok(Json(serde_json::json!({"records": list})))
 }
 
 // ── ACL ──
 
-async fn handle_list_acl(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let rules = db::list_acl_rules(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn handle_list_acl(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let rules = db::list_acl_rules(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let list: Vec<serde_json::Value> = rules
         .into_iter()
-        .map(|r| serde_json::json!({
-            "id": r.id,
-            "priority": r.priority,
-            "action": r.action,
-            "src_ip": r.src_ip,
-            "dst_ip": r.dst_ip,
-            "protocol": r.protocol,
-            "src_port": r.src_port,
-            "dst_port": r.dst_port,
-        }))
+        .map(|r| {
+            serde_json::json!({
+                "id": r.id,
+                "priority": r.priority,
+                "action": r.action,
+                "src_ip": r.src_ip,
+                "dst_ip": r.dst_ip,
+                "protocol": r.protocol,
+                "src_port": r.src_port,
+                "dst_port": r.dst_port,
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({"rules": list})))
@@ -538,25 +482,15 @@ async fn handle_upsert_acl(
     State(state): State<Arc<AppState>>,
     Json(req): Json<db::AclRuleRow>,
 ) -> Result<StatusCode, StatusCode> {
-    db::upsert_acl_rule(&state.db, &req)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    db::upsert_acl_rule(&state.db, &req).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::OK)
 }
 
-async fn handle_delete_acl(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> Result<StatusCode, StatusCode> {
-    db::delete_acl_rule(&state.db, id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn handle_delete_acl(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> Result<StatusCode, StatusCode> {
+    db::delete_acl_rule(&state.db, id).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::OK)
 }
 
 fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
 }

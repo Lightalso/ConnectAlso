@@ -103,10 +103,7 @@ pub extern "C" fn connectalso_send_packet(
 /// number of bytes written. Returns 0 if no data is available.
 /// Returns -1 on error.
 #[no_mangle]
-pub extern "C" fn connectalso_recv_packet(
-    out_buf: *mut u8,
-    out_buf_len: u32,
-) -> i32 {
+pub extern "C" fn connectalso_recv_packet(out_buf: *mut u8, out_buf_len: u32) -> i32 {
     if out_buf.is_null() {
         return -1;
     }
@@ -150,22 +147,19 @@ pub extern "C" fn connectalso_reconnect() -> i32 {
 ///
 /// Returns bytes written, 0 if timeout, -1 on error.
 #[no_mangle]
-pub extern "C" fn connectalso_recv_packet_timeout(
-    out_buf: *mut u8,
-    out_buf_len: u32,
-    timeout_ms: u32,
-) -> i32 {
-    if out_buf.is_null() { return -1; }
+pub extern "C" fn connectalso_recv_packet_timeout(out_buf: *mut u8, out_buf_len: u32, timeout_ms: u32) -> i32 {
+    if out_buf.is_null() {
+        return -1;
+    }
 
     match runtime().block_on(async {
-        tokio::time::timeout(
-            std::time::Duration::from_millis(timeout_ms as u64),
-            engine::engine_recv_packet(),
-        ).await
+        tokio::time::timeout(std::time::Duration::from_millis(timeout_ms as u64), engine::engine_recv_packet()).await
     }) {
         Ok(Ok(data)) => {
             let len = data.len().min(out_buf_len as usize);
-            unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), out_buf, len); }
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), out_buf, len);
+            }
             len as i32
         }
         _ => 0,
@@ -177,10 +171,7 @@ pub extern "C" fn connectalso_recv_packet_timeout(
 /// Writes a null-terminated string to `out_buf` (max `out_len` bytes).
 /// Returns the string length (excluding null) on success, -1 on error.
 #[no_mangle]
-pub extern "C" fn connectalso_get_virtual_ip(
-    out_buf: *mut c_char,
-    out_len: u32,
-) -> i32 {
+pub extern "C" fn connectalso_get_virtual_ip(out_buf: *mut c_char, out_len: u32) -> i32 {
     if out_buf.is_null() {
         return -1;
     }

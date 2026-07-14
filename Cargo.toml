@@ -5,6 +5,13 @@ members = [
     "apps/*",
     "services/*",
 ]
+default-members = [
+    "crates/*",
+    "apps/cli",
+    "apps/daemon",
+    "apps/mobile",
+    "services/*",
+]
 
 [workspace.package]
 version = "0.1.0"

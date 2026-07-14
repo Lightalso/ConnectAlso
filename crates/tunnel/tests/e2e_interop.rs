@@ -14,8 +14,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use connectalso_crypto::key_exchange::KeyPair;
+use connectalso_relay_proto::{MsgType, PeerId, RelayFrame};
 use connectalso_tunnel::relay::RelayClient;
-use connectalso_relay_proto::{PeerId, RelayFrame, MsgType};
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
@@ -80,23 +80,11 @@ async fn e2e_register_discover_relay() {
     // In production, the control service distributes peer IDs.
     // For the test, we simulate Alice re-registering with Bob's ID.
 
-    let alice_to_bob = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(),
-        relay_addr,
-        alice_relay_id,
-        bob_relay_id,
-    )
-    .await
-    .unwrap();
+    let alice_to_bob =
+        RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, alice_relay_id, bob_relay_id).await.unwrap();
 
-    let bob_to_alice = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(),
-        relay_addr,
-        bob_relay_id,
-        alice_relay_id,
-    )
-    .await
-    .unwrap();
+    let bob_to_alice =
+        RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, bob_relay_id, alice_relay_id).await.unwrap();
 
     tracing::info!("both peers registered with relay");
 
@@ -105,20 +93,16 @@ async fn e2e_register_discover_relay() {
     alice_to_bob.send(msg).await.unwrap();
 
     // 6. Bob receives
-    let (received, from) = timeout(TEST_TIMEOUT, bob_to_alice.recv())
-        .await
-        .expect("bob should receive message in time")
-        .unwrap();
+    let (received, from) =
+        timeout(TEST_TIMEOUT, bob_to_alice.recv()).await.expect("bob should receive message in time").unwrap();
 
     assert_eq!(&received[..], msg);
     assert_eq!(from, alice_relay_id);
 
     // 7. Bob echoes back
     bob_to_alice.send(b"echo from bob").await.unwrap();
-    let (received, from) = timeout(TEST_TIMEOUT, alice_to_bob.recv())
-        .await
-        .expect("alice should receive echo")
-        .unwrap();
+    let (received, from) =
+        timeout(TEST_TIMEOUT, alice_to_bob.recv()).await.expect("alice should receive echo").unwrap();
 
     assert_eq!(&received[..], b"echo from bob");
     assert_eq!(from, bob_relay_id);
@@ -138,24 +122,16 @@ async fn e2e_multi_peer_relay() {
     let peer_b_id = PeerId::new_v4();
     let peer_c_id = PeerId::new_v4();
 
-    let peer_a = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, peer_a_id, peer_b_id,
-    ).await.unwrap();
-    let peer_b_to_a = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, peer_b_id, peer_a_id,
-    ).await.unwrap();
-    let peer_b_to_c = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, peer_b_id, peer_c_id,
-    ).await.unwrap();
-    let peer_c = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, peer_c_id, peer_b_id,
-    ).await.unwrap();
-    let peer_a_to_c = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, peer_a_id, peer_c_id,
-    ).await.unwrap();
-    let peer_c_to_a = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, peer_c_id, peer_a_id,
-    ).await.unwrap();
+    let peer_a = RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, peer_a_id, peer_b_id).await.unwrap();
+    let peer_b_to_a =
+        RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, peer_b_id, peer_a_id).await.unwrap();
+    let peer_b_to_c =
+        RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, peer_b_id, peer_c_id).await.unwrap();
+    let peer_c = RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, peer_c_id, peer_b_id).await.unwrap();
+    let peer_a_to_c =
+        RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, peer_a_id, peer_c_id).await.unwrap();
+    let peer_c_to_a =
+        RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, peer_c_id, peer_a_id).await.unwrap();
 
     // A → B
     peer_a.send(b"A->B").await.unwrap();
@@ -196,20 +172,15 @@ async fn e2e_encrypted_tunnel_over_relay() {
     let a_id = PeerId::new_v4();
     let b_id = PeerId::new_v4();
 
-    let a_relay = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, a_id, b_id,
-    ).await.unwrap();
-    let b_relay = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, b_id, a_id,
-    ).await.unwrap();
+    let a_relay = RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, a_id, b_id).await.unwrap();
+    let b_relay = RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, b_id, a_id).await.unwrap();
 
     // Encrypt → Relay → Decrypt
     let plaintext = b"encrypted tunnel payload";
     let ciphertext = alice_tx.encrypt(plaintext).unwrap();
     a_relay.send(&ciphertext).await.unwrap();
 
-    let (received, _) = timeout(TEST_TIMEOUT, b_relay.recv())
-        .await.unwrap().unwrap();
+    let (received, _) = timeout(TEST_TIMEOUT, b_relay.recv()).await.unwrap().unwrap();
     let decrypted = bob_rx.decrypt(&received).unwrap();
     assert_eq!(&decrypted, plaintext);
 
@@ -240,8 +211,7 @@ async fn e2e_relay_routing() {
 
     // Bob should receive forwarded data
     let mut buf = [0u8; 512];
-    let (n, _) = timeout(TEST_TIMEOUT, b_sock.recv_from(&mut buf))
-        .await.unwrap().unwrap();
+    let (n, _) = timeout(TEST_TIMEOUT, b_sock.recv_from(&mut buf)).await.unwrap().unwrap();
     let received = RelayFrame::decode(&buf[..n]).unwrap();
     assert_eq!(received.sender_id, alice);
     assert_eq!(received.msg_type, MsgType::Data);
@@ -256,12 +226,7 @@ async fn e2e_protocol_frame_roundtrip() {
     let id1 = PeerId::new_v4();
     let id2 = PeerId::new_v4();
 
-    let payloads: Vec<Vec<u8>> = vec![
-        vec![],
-        vec![0xAA],
-        vec![0xBB; 256],
-        vec![0xCC; 1024],
-    ];
+    let payloads: Vec<Vec<u8>> = vec![vec![], vec![0xAA], vec![0xBB; 256], vec![0xCC; 1024]];
 
     for payload in &payloads {
         let frame = RelayFrame::data(id1, id2, payload.clone());
@@ -287,25 +252,15 @@ async fn e2e_stun_and_relay_fallback() {
     let b_id = PeerId::new_v4();
 
     // Both register with relay
-    let a_relay = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, a_id, b_id,
-    ).await.unwrap();
-    let b_relay = RelayClient::register(
-        "127.0.0.1:0".parse().unwrap(), relay_addr, b_id, a_id,
-    ).await.unwrap();
+    let a_relay = RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, a_id, b_id).await.unwrap();
+    let b_relay = RelayClient::register("127.0.0.1:0".parse().unwrap(), relay_addr, b_id, a_id).await.unwrap();
 
     // Communication via relay (STUN would have been preferred, but relay works)
-    let messages = vec![
-        b"packet 1: tcp syn",
-        b"packet 2: tcp ack",
-        b"packet 3: http request",
-        b"packet 4: dns query",
-    ];
+    let messages = vec![b"packet 1: tcp syn", b"packet 2: tcp ack", b"packet 3: http request", b"packet 4: dns query"];
 
     for (i, msg) in messages.iter().enumerate() {
         a_relay.send(msg).await.unwrap();
-        let (data, _) = timeout(TEST_TIMEOUT, b_relay.recv())
-            .await.unwrap().unwrap();
+        let (data, _) = timeout(TEST_TIMEOUT, b_relay.recv()).await.unwrap().unwrap();
         assert_eq!(&data[..], &msg[..], "packet {i} mismatch");
     }
 

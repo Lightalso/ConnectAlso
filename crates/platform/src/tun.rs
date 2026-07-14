@@ -52,11 +52,7 @@ impl TunConfig {
     /// Create a new TUN configuration with the given address and netmask.
     #[must_use]
     pub fn new(address: Ipv4Addr, netmask: Ipv4Addr) -> Self {
-        Self {
-            address,
-            netmask,
-            ..Default::default()
-        }
+        Self { address, netmask, ..Default::default() }
     }
 
     /// Set the TUN interface name.
@@ -75,12 +71,7 @@ impl TunConfig {
 
     fn to_tun2_config(&self) -> Configuration {
         let mut config = Configuration::default();
-        config
-            .address(self.address)
-            .netmask(self.netmask)
-            .mtu(self.mtu)
-            .layer(Layer::L3)
-            .up();
+        config.address(self.address).netmask(self.netmask).mtu(self.mtu).layer(Layer::L3).up();
         if let Some(ref name) = self.name {
             config.tun_name(name.as_str());
         }
@@ -104,12 +95,8 @@ impl TunDevice {
     /// assigns the configured IP address and netmask.
     pub async fn create(config: TunConfig) -> Result<Self, TunError> {
         let tun2_config = config.to_tun2_config();
-        let device =
-            create_as_async(&tun2_config).map_err(|e| TunError::Create(e.to_string()))?;
-        Ok(Self {
-            inner: device,
-            config,
-        })
+        let device = create_as_async(&tun2_config).map_err(|e| TunError::Create(e.to_string()))?;
+        Ok(Self { inner: device, config })
     }
 
     /// Return the configured interface name, or `"tun"` if none was set.
@@ -141,10 +128,7 @@ impl TunDevice {
     /// The buffer must be at least as large as the configured MTU.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize, TunError> {
         if buf.len() < self.config.mtu as usize {
-            return Err(TunError::BufferTooSmall {
-                need: self.config.mtu as usize,
-                got: buf.len(),
-            });
+            return Err(TunError::BufferTooSmall { need: self.config.mtu as usize, got: buf.len() });
         }
         self.inner.recv(buf).await.map_err(TunError::Recv)
     }

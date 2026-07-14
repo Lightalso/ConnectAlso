@@ -76,11 +76,7 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_init(
 /// Called from VpnService.protect() via RustBridge.
 /// This prevents the relay socket from going through our own TUN interface.
 #[no_mangle]
-pub extern "system" fn Java_com_connectalso_mobile_RustBridge_protectSocket(
-    _env: JNIEnv,
-    _class: JClass,
-    _fd: jint,
-) {
+pub extern "system" fn Java_com_connectalso_mobile_RustBridge_protectSocket(_env: JNIEnv, _class: JClass, _fd: jint) {
     // Protection is handled by the Kotlin VpnService calling
     // VpnService.protect(DatagramSocket). This JNI function is a
     // placeholder that the Kotlin side can call to register the
@@ -151,10 +147,7 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_recvPacket(
 /// Java signature:
 ///   native String getVirtualIP();
 #[no_mangle]
-pub extern "system" fn Java_com_connectalso_mobile_RustBridge_getVirtualIP(
-    env: JNIEnv,
-    _class: JClass,
-) -> jstring {
+pub extern "system" fn Java_com_connectalso_mobile_RustBridge_getVirtualIP(env: JNIEnv, _class: JClass) -> jstring {
     match engine::RUNTIME.block_on(async {
         let guard = engine::ENGINE.lock().unwrap();
         let arc = guard.as_ref().ok_or(())?;
@@ -174,10 +167,7 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_getVirtualIP(
 /// Java signature:
 ///   native void shutdown();
 #[no_mangle]
-pub extern "system" fn Java_com_connectalso_mobile_RustBridge_shutdown(
-    _env: JNIEnv,
-    _class: JClass,
-) {
+pub extern "system" fn Java_com_connectalso_mobile_RustBridge_shutdown(_env: JNIEnv, _class: JClass) {
     tracing::info!("Android engine shutting down");
 }
 
@@ -190,10 +180,7 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_shutdown(
 /// Re-registers with control service, refreshes peers, and re-connects
 /// relay sessions. Queued outbound packets are flushed automatically.
 #[no_mangle]
-pub extern "system" fn Java_com_connectalso_mobile_RustBridge_reconnect(
-    mut env: JNIEnv,
-    _class: JClass,
-) -> jboolean {
+pub extern "system" fn Java_com_connectalso_mobile_RustBridge_reconnect(mut env: JNIEnv, _class: JClass) -> jboolean {
     match engine::RUNTIME.block_on(engine::engine_reconnect()) {
         Ok(()) => jboolean::from(true),
         Err(e) => {

@@ -38,10 +38,7 @@ impl NatType {
     /// Whether P2P hole punching is likely to succeed for this NAT type.
     #[must_use]
     pub const fn supports_p2p(&self) -> bool {
-        matches!(
-            self,
-            Self::FullCone | Self::RestrictedCone | Self::PortRestrictedCone
-        )
+        matches!(self, Self::FullCone | Self::RestrictedCone | Self::PortRestrictedCone)
     }
 
     /// Whether a relay is recommended for this NAT type.

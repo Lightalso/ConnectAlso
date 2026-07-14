@@ -63,10 +63,7 @@ impl SessionCipher {
     pub fn new(shared_secret: &[u8; KEY_LEN], init_counter: u64) -> Self {
         let key = Key::from_slice(shared_secret);
         let cipher = ChaCha20Poly1305::new(key);
-        Self {
-            cipher,
-            counter: init_counter,
-        }
+        Self { cipher, counter: init_counter }
     }
 
     /// Encrypt a plaintext packet, returning the AEAD-authenticated ciphertext
@@ -78,10 +75,7 @@ impl SessionCipher {
     /// Returns `CryptoError::Encrypt` if the encryption operation fails.
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let nonce = self.next_nonce();
-        let ciphertext = self
-            .cipher
-            .encrypt(&nonce, plaintext)
-            .map_err(|_| CryptoError::Encrypt)?;
+        let ciphertext = self.cipher.encrypt(&nonce, plaintext).map_err(|_| CryptoError::Encrypt)?;
 
         let mut packet = Vec::with_capacity(NONCE_LEN + ciphertext.len());
         packet.extend_from_slice(nonce.as_slice());
@@ -101,9 +95,7 @@ impl SessionCipher {
         }
         let (nonce_bytes, ciphertext) = packet.split_at(NONCE_LEN);
         let nonce = Nonce::from_slice(nonce_bytes);
-        self.cipher
-            .decrypt(nonce, ciphertext)
-            .map_err(|_| CryptoError::Decrypt)
+        self.cipher.decrypt(nonce, ciphertext).map_err(|_| CryptoError::Decrypt)
     }
 
     fn next_nonce(&mut self) -> Nonce {

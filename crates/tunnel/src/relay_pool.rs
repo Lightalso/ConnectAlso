@@ -24,13 +24,7 @@ impl RelayServer {
     /// Create a new relay server entry.
     #[must_use]
     pub fn new(addr: SocketAddr) -> Self {
-        Self {
-            addr,
-            latency: None,
-            last_probe: None,
-            healthy: true,
-            failures: 0,
-        }
+        Self { addr, latency: None, last_probe: None, healthy: true, failures: 0 }
     }
 }
 
@@ -48,10 +42,7 @@ impl RelayPool {
     /// Panics if `addrs` is empty.
     pub fn new(addrs: &[SocketAddr]) -> Self {
         assert!(!addrs.is_empty(), "at least one relay server required");
-        Self {
-            servers: addrs.iter().map(|a| RelayServer::new(*a)).collect(),
-            active: 0,
-        }
+        Self { servers: addrs.iter().map(|a| RelayServer::new(*a)).collect(), active: 0 }
     }
 
     /// Return the currently active relay address.
@@ -80,8 +71,7 @@ impl RelayPool {
                     let _ = sock.send_to(b"P", server.addr).await;
                     let mut buf = [0u8; 1];
 
-                    match tokio::time::timeout(Duration::from_secs(2), sock.recv_from(&mut buf)).await
-                    {
+                    match tokio::time::timeout(Duration::from_secs(2), sock.recv_from(&mut buf)).await {
                         Ok(Ok(_)) => {
                             server.latency = Some(start.elapsed());
                             server.healthy = true;
@@ -178,10 +168,7 @@ mod tests {
     async fn relay_pool_selection() {
         let _ = tracing_subscriber::fmt().try_init();
 
-        let servers = vec![
-            "127.0.0.1:33478".parse().unwrap(),
-            "127.0.0.1:33479".parse().unwrap(),
-        ];
+        let servers = vec!["127.0.0.1:33478".parse().unwrap(), "127.0.0.1:33479".parse().unwrap()];
         let mut pool = RelayPool::new(&servers);
 
         assert_eq!(pool.len(), 2);

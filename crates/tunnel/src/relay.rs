@@ -29,12 +29,7 @@ impl RelayClient {
         socket.send_to(&encoded, relay_addr).await?;
         tracing::info!(%our_id, %relay_addr, "registered with relay");
 
-        Ok(Self {
-            socket,
-            relay_addr,
-            our_id,
-            peer_id,
-        })
+        Ok(Self { socket, relay_addr, our_id, peer_id })
     }
 
     /// Send encrypted data to the target peer via the relay.
@@ -52,9 +47,7 @@ impl RelayClient {
             let (n, _from) = self.socket.recv_from(&mut buf).await?;
 
             if let Ok(frame) = RelayFrame::decode(&buf[..n]) {
-                if frame.msg_type == connectalso_relay_proto::MsgType::Data
-                    && frame.sender_id == self.peer_id
-                {
+                if frame.msg_type == connectalso_relay_proto::MsgType::Data && frame.sender_id == self.peer_id {
                     return Ok((frame.payload, frame.sender_id));
                 }
             }

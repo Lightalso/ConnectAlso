@@ -47,11 +47,7 @@ fn make_icon(color: [u8; 4]) -> Icon {
             let dy = (y as i32 - 16).abs();
             let dist = ((dx * dx + dy * dy) as f32).sqrt();
             if dist <= 13.0 {
-                let alpha = if dist > 11.5 {
-                    ((a as f32) * (13.0 - dist) / 1.5) as u8
-                } else {
-                    a
-                };
+                let alpha = if dist > 11.5 { ((a as f32) * (13.0 - dist) / 1.5) as u8 } else { a };
                 rgba.extend_from_slice(&[r, g, b, alpha]);
             } else {
                 rgba.extend_from_slice(&[0, 0, 0, 0]);
@@ -63,8 +59,8 @@ fn make_icon(color: [u8; 4]) -> Icon {
 
 fn status_color(status: ConnStatus) -> [u8; 4] {
     match status {
-        ConnStatus::Connected => [0x4C, 0xAF, 0x50, 0xFF],   // green
-        ConnStatus::RelayOnly => [0xFF, 0x98, 0x00, 0xFF],   // orange
+        ConnStatus::Connected => [0x4C, 0xAF, 0x50, 0xFF],    // green
+        ConnStatus::RelayOnly => [0xFF, 0x98, 0x00, 0xFF],    // orange
         ConnStatus::Disconnected => [0x9E, 0x9E, 0x9E, 0xFF], // gray
     }
 }
@@ -79,32 +75,27 @@ fn fmt_status(status: ConnStatus) -> &'static str {
 
 async fn fetch_status(url: &str) -> ConnStatus {
     match reqwest::get(format!("{url}/status")).await {
-        Ok(r) if r.status().is_success() => {
-            match r.json::<StatusResponse>().await {
-                Ok(s) if !s.device_id.is_empty() => {
-                    if s.peers.iter().any(|p| p.path == "direct") {
-                        ConnStatus::Connected
-                    } else if s.peer_count > 0 {
-                        ConnStatus::RelayOnly
-                    } else {
-                        ConnStatus::Disconnected
-                    }
+        Ok(r) if r.status().is_success() => match r.json::<StatusResponse>().await {
+            Ok(s) if !s.device_id.is_empty() => {
+                if s.peers.iter().any(|p| p.path == "direct") {
+                    ConnStatus::Connected
+                } else if s.peer_count > 0 {
+                    ConnStatus::RelayOnly
+                } else {
+                    ConnStatus::Disconnected
                 }
-                _ => ConnStatus::Disconnected,
             }
-        }
+            _ => ConnStatus::Disconnected,
+        },
         _ => ConnStatus::Disconnected,
     }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
-    let daemon_url = std::env::var("CONNECTALSO_DAEMON")
-        .unwrap_or_else(|_| DAEMON_URL.to_string());
+    let daemon_url = std::env::var("CONNECTALSO_DAEMON").unwrap_or_else(|_| DAEMON_URL.to_string());
 
     tracing::info!("ConnectAlso Desktop Tray (daemon: {daemon_url})");
 
@@ -116,14 +107,7 @@ async fn main() -> anyhow::Result<()> {
     let about_label = MenuItem::new("ConnectAlso Desktop Alpha v0.1.0", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
-    menu.append_items(&[
-        &status_label,
-        &sep1,
-        &diag_label,
-        &sep2,
-        &about_label,
-        &quit_item,
-    ])?;
+    menu.append_items(&[&status_label, &sep1, &diag_label, &sep2, &about_label, &quit_item])?;
 
     let icon = make_icon(status_color(ConnStatus::Disconnected));
     let tray = TrayIconBuilder::new()

@@ -16,13 +16,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Status { #[arg(short, long)] verbose: bool },
+    Status {
+        #[arg(short, long)]
+        verbose: bool,
+    },
     Diag,
     Start {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
-        #[arg(long, default_value = "127.0.0.1:3478")] stun_server: SocketAddr,
-        #[arg(long, default_value = "127.0.0.1:33478")] relay_server: SocketAddr,
-        #[arg(short, long, default_value = "unnamed")] hostname: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
+        #[arg(long, default_value = "127.0.0.1:3478")]
+        stun_server: SocketAddr,
+        #[arg(long, default_value = "127.0.0.1:33478")]
+        relay_server: SocketAddr,
+        #[arg(short, long, default_value = "unnamed")]
+        hostname: String,
     },
     Stop,
     /// 管理员命令
@@ -32,11 +39,13 @@ enum Commands {
     },
     /// 备份控制服务数据库
     Backup {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
     },
     /// 从备份恢复控制服务数据库
     Restore {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
     },
 }
 
@@ -44,21 +53,25 @@ enum Commands {
 enum AdminCmd {
     /// 列出待审批设备
     Pending {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
     },
     /// 审批设备
     Approve {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
         device_id: String,
     },
     /// 撤销设备
     Revoke {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
         device_id: String,
     },
     /// 列出所有设备（含状态）
     Peers {
-        #[arg(long, default_value = "http://127.0.0.1:3000")] control_url: String,
+        #[arg(long, default_value = "http://127.0.0.1:3000")]
+        control_url: String,
     },
 }
 
@@ -110,9 +123,13 @@ fn fmt_duration(secs: u64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     let s = secs % 60;
-    if h > 0 { format!("{h}h {m}m {s}s") }
-    else if m > 0 { format!("{m}m {s}s") }
-    else { format!("{s}s") }
+    if h > 0 {
+        format!("{h}h {m}m {s}s")
+    } else if m > 0 {
+        format!("{m}m {s}s")
+    } else {
+        format!("{s}s")
+    }
 }
 
 fn status_icon(status: &str) -> &str {
@@ -130,8 +147,9 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Status { verbose } => cmd_status(&cli.daemon_url, verbose).await?,
         Commands::Diag => cmd_diag(&cli.daemon_url).await?,
-        Commands::Start { control_url, stun_server, relay_server, hostname } =>
-            cmd_start(&control_url, stun_server, relay_server, &hostname).await?,
+        Commands::Start { control_url, stun_server, relay_server, hostname } => {
+            cmd_start(&control_url, stun_server, relay_server, &hostname).await?
+        }
         Commands::Stop => cmd_stop(&cli.daemon_url).await?,
         Commands::Admin { action } => match action {
             AdminCmd::Pending { control_url } => cmd_admin_pending(&control_url).await?,
@@ -165,17 +183,24 @@ async fn cmd_status(daemon_url: &str, verbose: bool) -> anyhow::Result<()> {
                     println!("  {:<16}  {:<16}  {:<10}  {}", "PEER", "VIRTUAL IP", "PATH", "HOSTNAME");
                     println!("  {}", "-".repeat(64));
                     for p in &s.peers {
-                        println!("  {:<16}  {:<16}  {:<10}  {}",
+                        println!(
+                            "  {:<16}  {:<16}  {:<10}  {}",
                             &p.device_id[..p.device_id.len().min(16)],
-                            p.virtual_ip, p.path, p.hostname);
+                            p.virtual_ip,
+                            p.path,
+                            p.hostname
+                        );
                     }
                 } else {
                     println!("  {:<20}  {:<16}  {}", "PEER", "VIRTUAL IP", "HOSTNAME");
                     println!("  {}", "-".repeat(58));
                     for p in &s.peers {
-                        println!("  {:<20}  {:<16}  {}",
+                        println!(
+                            "  {:<20}  {:<16}  {}",
                             &p.device_id[..p.device_id.len().min(20)],
-                            p.virtual_ip, p.hostname);
+                            p.virtual_ip,
+                            p.hostname
+                        );
                     }
                 }
             }
@@ -215,13 +240,14 @@ async fn cmd_diag(daemon_url: &str) -> anyhow::Result<()> {
                 println!("  Peers:");
                 for p in &d.peers {
                     let icon = if p.reachable { "✓" } else { "✗" };
-                    println!("    {icon} {:<12}  {:<16}  path={}",
-                        p.hostname, p.virtual_ip, p.path);
+                    println!("    {icon} {:<12}  {:<16}  path={}", p.hostname, p.virtual_ip, p.path);
                 }
             }
 
             let all_ok = checks.iter().all(|(_, c)| c.status == "ok");
-            if all_ok { println!("\nAll checks passed."); }
+            if all_ok {
+                println!("\nAll checks passed.");
+            }
         }
         _ => println!("Daemon not running. Use: connectalso start"),
     }
@@ -229,7 +255,10 @@ async fn cmd_diag(daemon_url: &str) -> anyhow::Result<()> {
 }
 
 async fn cmd_start(
-    control_url: &str, stun_server: SocketAddr, relay_server: SocketAddr, hostname: &str,
+    control_url: &str,
+    stun_server: SocketAddr,
+    relay_server: SocketAddr,
+    hostname: &str,
 ) -> anyhow::Result<()> {
     println!("ConnectAlso Desktop Alpha");
     println!("  Control : {control_url}");
@@ -244,10 +273,14 @@ async fn cmd_start(
     }
 
     let child = std::process::Command::new("connectalso-daemon")
-        .arg("--control-url").arg(control_url)
-        .arg("--stun-server").arg(stun_server.to_string())
-        .arg("--relay-server").arg(relay_server.to_string())
-        .arg("--hostname").arg(hostname)
+        .arg("--control-url")
+        .arg(control_url)
+        .arg("--stun-server")
+        .arg(stun_server.to_string())
+        .arg("--relay-server")
+        .arg(relay_server.to_string())
+        .arg("--hostname")
+        .arg(hostname)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
@@ -283,7 +316,8 @@ async fn cmd_admin_pending(control_url: &str) -> anyhow::Result<()> {
     } else {
         println!("Pending devices ({})", pending.len());
         for d in pending {
-            println!("  {}  {}  {}",
+            println!(
+                "  {}  {}  {}",
                 d["device_id"].as_str().unwrap_or("-"),
                 d["hostname"].as_str().unwrap_or("-"),
                 d["ipv4"].as_str().unwrap_or("-"),
@@ -296,10 +330,8 @@ async fn cmd_admin_pending(control_url: &str) -> anyhow::Result<()> {
 
 async fn cmd_admin_approve(control_url: &str, device_id: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
-    let resp: serde_json::Value = http
-        .put(format!("{control_url}/api/v1/register/{device_id}/approve"))
-        .send().await?
-        .json().await?;
+    let resp: serde_json::Value =
+        http.put(format!("{control_url}/api/v1/register/{device_id}/approve")).send().await?.json().await?;
     if resp["approved"].as_bool().unwrap_or(false) {
         println!("Device {device_id} approved.");
     } else {
@@ -310,10 +342,8 @@ async fn cmd_admin_approve(control_url: &str, device_id: &str) -> anyhow::Result
 
 async fn cmd_admin_revoke(control_url: &str, device_id: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
-    let resp: serde_json::Value = http
-        .put(format!("{control_url}/api/v1/register/{device_id}/revoke"))
-        .send().await?
-        .json().await?;
+    let resp: serde_json::Value =
+        http.put(format!("{control_url}/api/v1/register/{device_id}/revoke")).send().await?.json().await?;
     if resp["revoked"].as_bool().unwrap_or(false) {
         println!("Device {device_id} revoked.");
     } else {
@@ -324,15 +354,13 @@ async fn cmd_admin_revoke(control_url: &str, device_id: &str) -> anyhow::Result<
 
 async fn cmd_admin_peers(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
-    let resp: serde_json::Value = http
-        .get(format!("{control_url}/api/v1/admin/peers"))
-        .send().await?
-        .json().await?;
+    let resp: serde_json::Value = http.get(format!("{control_url}/api/v1/admin/peers")).send().await?.json().await?;
     let peers = resp["peers"].as_array().unwrap_or(&vec![]);
     println!("All devices ({})", peers.len());
     println!("  {:<38}  {:<16}  {:<12}  {}", "DEVICE ID", "IP", "STATUS", "HOSTNAME");
     for d in peers {
-        println!("  {:<38}  {:<16}  {:<12}  {}",
+        println!(
+            "  {:<38}  {:<16}  {:<12}  {}",
             d["device_id"].as_str().unwrap_or("-"),
             d["ipv4"].as_str().unwrap_or("-"),
             d["status"].as_str().unwrap_or("-"),
@@ -344,10 +372,7 @@ async fn cmd_admin_peers(control_url: &str) -> anyhow::Result<()> {
 
 async fn cmd_backup(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
-    let resp: serde_json::Value = http
-        .post(format!("{control_url}/api/v1/backup"))
-        .send().await?
-        .json().await?;
+    let resp: serde_json::Value = http.post(format!("{control_url}/api/v1/backup")).send().await?.json().await?;
     if resp["success"].as_bool().unwrap_or(false) {
         println!("Backup created: {}", resp["path"].as_str().unwrap_or("-"));
     } else {
@@ -361,13 +386,12 @@ async fn cmd_restore(control_url: &str) -> anyhow::Result<()> {
     println!("Continue? [y/N]");
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
-    if input.trim().to_lowercase() != "y" { return Ok(()); }
+    if input.trim().to_lowercase() != "y" {
+        return Ok(());
+    }
 
     let http = reqwest::Client::new();
-    let resp: serde_json::Value = http
-        .post(format!("{control_url}/api/v1/restore"))
-        .send().await?
-        .json().await?;
+    let resp: serde_json::Value = http.post(format!("{control_url}/api/v1/restore")).send().await?.json().await?;
     if resp["success"].as_bool().unwrap_or(false) {
         println!("Database restored from backup.");
     } else {

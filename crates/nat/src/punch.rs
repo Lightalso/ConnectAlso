@@ -113,12 +113,8 @@ mod tests {
         let _ = tracing_subscriber::fmt().try_init();
 
         // Peer A and Peer B on different localhost ports (simulating NAT endpoints)
-        let peer_a = Puncher::bind("127.0.0.1:0".parse().unwrap())
-            .await
-            .unwrap();
-        let peer_b = Puncher::bind("127.0.0.1:0".parse().unwrap())
-            .await
-            .unwrap();
+        let peer_a = Puncher::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let peer_b = Puncher::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
 
         let a_addr = peer_a.local_addr().unwrap();
         let b_addr = peer_b.local_addr().unwrap();
@@ -131,10 +127,8 @@ mod tests {
         let a_token = b"alice-token-42";
         let b_token = b"bob-token-07";
 
-        let (a_result, b_result) = tokio::join!(
-            peer_a.punch(&a_candidates, a_token),
-            peer_b.punch(&b_candidates, b_token),
-        );
+        let (a_result, b_result) =
+            tokio::join!(peer_a.punch(&a_candidates, a_token), peer_b.punch(&b_candidates, b_token),);
 
         let a_response = a_result.unwrap();
         let b_response = b_result.unwrap();
@@ -156,12 +150,8 @@ mod tests {
     async fn punch_then_communicate() {
         let _ = tracing_subscriber::fmt().try_init();
 
-        let peer_a = Puncher::bind("127.0.0.1:0".parse().unwrap())
-            .await
-            .unwrap();
-        let peer_b = Puncher::bind("127.0.0.1:0".parse().unwrap())
-            .await
-            .unwrap();
+        let peer_a = Puncher::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+        let peer_b = Puncher::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
 
         let a_addr = peer_a.local_addr().unwrap();
         let b_addr = peer_b.local_addr().unwrap();

@@ -40,14 +40,10 @@ pub struct DeviceRecord {
 
 /// Initialize the SQLite database and create tables.
 pub async fn init_db(path: &str) -> anyhow::Result<SqlitePool> {
-    let opts = SqliteConnectOptions::from_str(path)?
-        .create_if_missing(true);
+    let opts = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
 
-    let pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect_with(opts)
-        .await
-        .context("failed to open database")?;
+    let pool =
+        SqlitePoolOptions::new().max_connections(5).connect_with(opts).await.context("failed to open database")?;
 
     sqlx::query(
         r#"
@@ -66,9 +62,7 @@ pub async fn init_db(path: &str) -> anyhow::Result<SqlitePool> {
     .await?;
 
     // Migration: add status column if missing (for existing databases)
-    let _ = sqlx::query("ALTER TABLE devices ADD COLUMN status INTEGER NOT NULL DEFAULT 1")
-        .execute(&pool)
-        .await;
+    let _ = sqlx::query("ALTER TABLE devices ADD COLUMN status INTEGER NOT NULL DEFAULT 1").execute(&pool).await;
 
     sqlx::query(
         r#"
@@ -236,10 +230,7 @@ pub async fn delete_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result
         .execute(pool)
         .await?;
 
-    let rows = sqlx::query("DELETE FROM devices WHERE device_id = ?")
-        .bind(device_id.to_string())
-        .execute(pool)
-        .await?;
+    let rows = sqlx::query("DELETE FROM devices WHERE device_id = ?").bind(device_id.to_string()).execute(pool).await?;
     Ok(rows.rows_affected() > 0)
 }
 
@@ -251,10 +242,8 @@ pub async fn purge_stale(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result
         .execute(pool)
         .await?;
 
-    let rows = sqlx::query("DELETE FROM devices WHERE last_seen < ? AND status != 1")
-        .bind(cutoff)
-        .execute(pool)
-        .await?;
+    let rows =
+        sqlx::query("DELETE FROM devices WHERE last_seen < ? AND status != 1").bind(cutoff).execute(pool).await?;
     let count = rows.rows_affected() as usize;
     if count > 0 {
         tracing::info!(count, "purged stale devices");
@@ -265,27 +254,19 @@ pub async fn purge_stale(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result
 // ── IP Pool ──
 
 pub async fn allocate_ip(pool: &SqlitePool, base: u32, max_offset: u32) -> Option<Ipv4Addr> {
-    let row = sqlx::query_as::<_, IpPoolRow>(
-        "SELECT ipv4, allocated FROM ip_pool WHERE allocated = 0 ORDER BY ipv4 LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
+    let row =
+        sqlx::query_as::<_, IpPoolRow>("SELECT ipv4, allocated FROM ip_pool WHERE allocated = 0 ORDER BY ipv4 LIMIT 1")
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
 
     if let Some(r) = row {
-        sqlx::query("UPDATE ip_pool SET allocated = 1 WHERE ipv4 = ?")
-            .bind(&r.ipv4)
-            .execute(pool)
-            .await
-            .ok();
+        sqlx::query("UPDATE ip_pool SET allocated = 1 WHERE ipv4 = ?").bind(&r.ipv4).execute(pool).await.ok();
         return Some(r.ipv4.parse().ok()?);
     }
 
-    let used: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool")
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let used: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool").fetch_one(pool).await.unwrap_or(0);
 
     if used as u32 > max_offset {
         return None;
@@ -295,27 +276,17 @@ pub async fn allocate_ip(pool: &SqlitePool, base: u32, max_offset: u32) -> Optio
     let ip = Ipv4Addr::from(ip_u32.to_be_bytes());
     let ip_str = ip.to_string();
 
-    sqlx::query("INSERT INTO ip_pool (ipv4, allocated) VALUES (?, 1)")
-        .bind(&ip_str)
-        .execute(pool)
-        .await
-        .ok();
+    sqlx::query("INSERT INTO ip_pool (ipv4, allocated) VALUES (?, 1)").bind(&ip_str).execute(pool).await.ok();
 
     Some(ip)
 }
 
 pub async fn allocated_count(pool: &SqlitePool) -> i64 {
-    sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool WHERE allocated = 1")
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0)
+    sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool WHERE allocated = 1").fetch_one(pool).await.unwrap_or(0)
 }
 
 pub async fn pool_size(pool: &SqlitePool) -> i64 {
-    sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool")
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0)
+    sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool").fetch_one(pool).await.unwrap_or(0)
 }
 
 // ── Backup & Restore ──
@@ -368,21 +339,17 @@ pub async fn upsert_candidate(pool: &SqlitePool, device_id: Uuid, address: &str)
 }
 
 pub async fn get_candidates(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<Vec<String>> {
-    let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT address FROM candidates WHERE device_id = ? ORDER BY updated_at DESC",
-    )
-    .bind(device_id.to_string())
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT address FROM candidates WHERE device_id = ? ORDER BY updated_at DESC")
+            .bind(device_id.to_string())
+            .fetch_all(pool)
+            .await?;
     Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
 pub async fn purge_stale_candidates(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result<usize> {
     let cutoff = unix_now() - timeout_secs;
-    let rows = sqlx::query("DELETE FROM candidates WHERE updated_at < ?")
-        .bind(cutoff)
-        .execute(pool)
-        .await?;
+    let rows = sqlx::query("DELETE FROM candidates WHERE updated_at < ?").bind(cutoff).execute(pool).await?;
     Ok(rows.rows_affected() as usize)
 }
 
@@ -437,7 +404,7 @@ pub struct AclRuleRow {
 
 pub async fn list_acl_rules(pool: &SqlitePool) -> anyhow::Result<Vec<AclRuleRow>> {
     sqlx::query_as::<_, AclRuleRow>(
-        "SELECT id, priority, action, src_ip, dst_ip, protocol, src_port, dst_port FROM acl_rules ORDER BY priority"
+        "SELECT id, priority, action, src_ip, dst_ip, protocol, src_port, dst_port FROM acl_rules ORDER BY priority",
     )
     .fetch_all(pool)
     .await
@@ -451,7 +418,7 @@ pub async fn upsert_acl_rule(pool: &SqlitePool, rule: &AclRuleRow) -> anyhow::Re
          ON CONFLICT(id) DO UPDATE SET
             priority=excluded.priority, action=excluded.action,
             src_ip=excluded.src_ip, dst_ip=excluded.dst_ip,
-            protocol=excluded.protocol, src_port=excluded.src_port, dst_port=excluded.dst_port"
+            protocol=excluded.protocol, src_port=excluded.src_port, dst_port=excluded.dst_port",
     )
     .bind(rule.id)
     .bind(rule.priority)
@@ -467,25 +434,20 @@ pub async fn upsert_acl_rule(pool: &SqlitePool, rule: &AclRuleRow) -> anyhow::Re
 }
 
 pub async fn delete_acl_rule(pool: &SqlitePool, id: i64) -> anyhow::Result<bool> {
-    let rows = sqlx::query("DELETE FROM acl_rules WHERE id = ?")
-        .bind(id).execute(pool).await?;
+    let rows = sqlx::query("DELETE FROM acl_rules WHERE id = ?").bind(id).execute(pool).await?;
     Ok(rows.rows_affected() > 0)
 }
 
 // ── DNS ──
 
 pub async fn list_dns_records(pool: &SqlitePool) -> anyhow::Result<Vec<(String, String)>> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT hostname, ipv4 FROM devices WHERE status = 1 AND hostname != '' AND ipv4 != ''"
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT hostname, ipv4 FROM devices WHERE status = 1 AND hostname != '' AND ipv4 != ''")
+            .fetch_all(pool)
+            .await?;
     Ok(rows)
 }
 
 fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
 }

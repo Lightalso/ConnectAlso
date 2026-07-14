@@ -22,18 +22,12 @@ impl Candidate {
     /// Create a host candidate from a local address.
     #[must_use]
     pub fn host(addr: SocketAddr) -> Self {
-        Self {
-            addr,
-            ty: CandidateType::Host,
-        }
+        Self { addr, ty: CandidateType::Host }
     }
 
     /// Create a server-reflexive candidate from a STUN response.
     #[must_use]
     pub fn server_reflexive(addr: SocketAddr) -> Self {
-        Self {
-            addr,
-            ty: CandidateType::ServerReflexive,
-        }
+        Self { addr, ty: CandidateType::ServerReflexive }
     }
 }

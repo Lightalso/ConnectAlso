@@ -80,34 +80,19 @@ impl RelayFrame {
     /// Create a HELLO frame from a peer.
     #[must_use]
     pub fn hello(sender_id: PeerId) -> Self {
-        Self {
-            sender_id,
-            target_id: PeerId::nil(),
-            msg_type: MsgType::Hello,
-            payload: Vec::new(),
-        }
+        Self { sender_id, target_id: PeerId::nil(), msg_type: MsgType::Hello, payload: Vec::new() }
     }
 
     /// Create a DATA frame carrying encrypted payload from `sender` to `target`.
     #[must_use]
     pub fn data(sender_id: PeerId, target_id: PeerId, encrypted_payload: Vec<u8>) -> Self {
-        Self {
-            sender_id,
-            target_id,
-            msg_type: MsgType::Data,
-            payload: encrypted_payload,
-        }
+        Self { sender_id, target_id, msg_type: MsgType::Data, payload: encrypted_payload }
     }
 
     /// Create a KEEPALIVE frame.
     #[must_use]
     pub fn keepalive(sender_id: PeerId) -> Self {
-        Self {
-            sender_id,
-            target_id: PeerId::nil(),
-            msg_type: MsgType::Keepalive,
-            payload: Vec::new(),
-        }
+        Self { sender_id, target_id: PeerId::nil(), msg_type: MsgType::Keepalive, payload: Vec::new() }
     }
 
     /// Serialize this frame to bytes suitable for sending over UDP.
@@ -161,12 +146,7 @@ impl RelayFrame {
         }
         let payload = data[HEADER_LEN..payload_end].to_vec();
 
-        Ok(Self {
-            sender_id,
-            target_id,
-            msg_type,
-            payload,
-        })
+        Ok(Self { sender_id, target_id, msg_type, payload })
     }
 }
 

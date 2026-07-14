@@ -139,13 +139,8 @@ impl TunnelEngine {
     async fn sync_peers(&mut self) -> anyhow::Result<usize> {
         let our_relay_id = PeerId::from_bytes(self.our_id.into_bytes());
 
-        let peers: PeersResponse = self
-            .http
-            .get(format!("{}/api/v1/peers", self.control_url))
-            .send()
-            .await?
-            .json()
-            .await?;
+        let peers: PeersResponse =
+            self.http.get(format!("{}/api/v1/peers", self.control_url)).send().await?.json().await?;
 
         let mut count = 0;
         for p in peers.peers.into_iter().filter(|p| p.device_id != self.our_id) {
@@ -155,13 +150,7 @@ impl TunnelEngine {
             let vip: Ipv4Addr = p.ipv4.parse()?;
             let peer_relay_id = PeerId::from_bytes(p.device_id.into_bytes());
 
-            match RelayClient::register(
-                "0.0.0.0:0".parse()?,
-                self.relay_server,
-                our_relay_id,
-                peer_relay_id,
-            ).await
-            {
+            match RelayClient::register("0.0.0.0:0".parse()?, self.relay_server, our_relay_id, peer_relay_id).await {
                 Ok(relay) => {
                     self.peers.insert(p.device_id, PeerState { vip, relay: Mutex::new(relay) });
                     count += 1;
@@ -178,7 +167,8 @@ impl TunnelEngine {
         tracing::info!("network changed — reconnecting");
 
         // 1. Heartbeat to control service (refreshes our registration)
-        let _ = self.http
+        let _ = self
+            .http
             .post(format!("{}/api/v1/heartbeat", self.control_url))
             .json(&serde_json::json!({"device_id": self.our_id}))
             .send()
@@ -187,26 +177,15 @@ impl TunnelEngine {
         // 2. Refresh peer list
         let our_relay_id = PeerId::from_bytes(self.our_id.into_bytes());
 
-        let peers: PeersResponse = self
-            .http
-            .get(format!("{}/api/v1/peers", self.control_url))
-            .send()
-            .await?
-            .json()
-            .await?;
+        let peers: PeersResponse =
+            self.http.get(format!("{}/api/v1/peers", self.control_url)).send().await?.json().await?;
 
         // 3. Reconnect relay for all peers
         for p in peers.peers.into_iter().filter(|p| p.device_id != self.our_id) {
             let vip: Ipv4Addr = p.ipv4.parse()?;
             let peer_relay_id = PeerId::from_bytes(p.device_id.into_bytes());
 
-            match RelayClient::register(
-                "0.0.0.0:0".parse()?,
-                self.relay_server,
-                our_relay_id,
-                peer_relay_id,
-            ).await
-            {
+            match RelayClient::register("0.0.0.0:0".parse()?, self.relay_server, our_relay_id, peer_relay_id).await {
                 Ok(relay) => {
                     self.peers.insert(p.device_id, PeerState { vip, relay: Mutex::new(relay) });
                 }
@@ -254,11 +233,7 @@ impl TunnelEngine {
     async fn recv_from_any(&self) -> anyhow::Result<Vec<u8>> {
         for peer in self.peers.values() {
             let relay = peer.relay.lock().await;
-            match tokio::time::timeout(
-                std::time::Duration::from_millis(10),
-                relay.recv(),
-            ).await
-            {
+            match tokio::time::timeout(std::time::Duration::from_millis(10), relay.recv()).await {
                 Ok(Ok((data, _sender))) => return Ok(data),
                 _ => continue,
             }
@@ -316,11 +291,7 @@ impl TunnelEngine {
 /// Global engine instance.
 pub(crate) static ENGINE: StdMutex<Option<Arc<Mutex<TunnelEngine>>>> = StdMutex::new(None);
 
-pub(crate) async fn engine_init(
-    control_url: &str,
-    relay_server: SocketAddr,
-    hostname: &str,
-) -> anyhow::Result<()> {
+pub(crate) async fn engine_init(control_url: &str, relay_server: SocketAddr, hostname: &str) -> anyhow::Result<()> {
     let mut engine = TunnelEngine::new(control_url, relay_server, hostname).await?;
     engine.sync_peers().await?;
     *ENGINE.lock().unwrap() = Some(Arc::new(Mutex::new(engine)));
@@ -337,7 +308,9 @@ pub(crate) async fn engine_reconnect() -> anyhow::Result<()> {
 
 /// Return current connection state.
 pub(crate) fn engine_state() -> ConnState {
-    ENGINE.lock().unwrap()
+    ENGINE
+        .lock()
+        .unwrap()
         .as_ref()
         .map(|_| {
             // We can't easily get the state without locking the inner mutex

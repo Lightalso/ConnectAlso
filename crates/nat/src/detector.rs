@@ -43,9 +43,7 @@ mod tests {
 
     /// Spawns a mock STUN server that echoes back the client address.
     async fn spawn_echo_stun() -> SocketAddr {
-        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
         let addr = socket.local_addr().unwrap();
 
         tokio::spawn(async move {

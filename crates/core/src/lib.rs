@@ -1,6 +1,6 @@
-//! ConnectAlso common types, configuration and protocol definitions.
+//! `ConnectAlso` common types, configuration and protocol definitions.
 //!
-//! This crate provides shared types used across all other ConnectAlso crates,
+//! This crate provides shared types used across all other `ConnectAlso` crates,
 //! including ACL rule evaluation and packet parsing utilities.
 
 use std::net::Ipv4Addr;
@@ -90,12 +90,16 @@ impl AclRule {
     pub fn matches(&self, pkt: &PacketInfo) -> bool {
         if !self.src_ip.is_empty() {
             if let Ok(ip) = self.src_ip.parse::<Ipv4Addr>() {
-                if ip != pkt.src_ip { return false; }
+                if ip != pkt.src_ip {
+                    return false;
+                }
             }
         }
         if !self.dst_ip.is_empty() {
             if let Ok(ip) = self.dst_ip.parse::<Ipv4Addr>() {
-                if ip != pkt.dst_ip { return false; }
+                if ip != pkt.dst_ip {
+                    return false;
+                }
             }
         }
         if !self.protocol.is_empty() {
@@ -105,10 +109,16 @@ impl AclRule {
                 "icmp" => 1,
                 _ => return false,
             };
-            if pkt.protocol != proto_num { return false; }
+            if pkt.protocol != proto_num {
+                return false;
+            }
         }
-        if self.src_port != 0 && pkt.src_port != self.src_port { return false; }
-        if self.dst_port != 0 && pkt.dst_port != self.dst_port { return false; }
+        if self.src_port != 0 && pkt.src_port != self.src_port {
+            return false;
+        }
+        if self.dst_port != 0 && pkt.dst_port != self.dst_port {
+            return false;
+        }
         true
     }
 }
@@ -141,11 +151,11 @@ mod tests {
         // Minimal TCP SYN packet: IPv4 header (20B) + TCP header (20B)
         let mut pkt = vec![0u8; 40];
         pkt[0] = 0x45; // Version=4, IHL=5
-        pkt[9] = 6;    // TCP
+        pkt[9] = 6; // TCP
         pkt[12..16].copy_from_slice(&[10, 0, 0, 1]); // src
         pkt[16..20].copy_from_slice(&[10, 0, 0, 2]); // dst
         pkt[20..22].copy_from_slice(&12345u16.to_be_bytes()); // src port
-        pkt[22..24].copy_from_slice(&80u16.to_be_bytes());    // dst port
+        pkt[22..24].copy_from_slice(&80u16.to_be_bytes()); // dst port
 
         let info = PacketInfo::parse(&pkt).unwrap();
         assert_eq!(info.src_ip, Ipv4Addr::new(10, 0, 0, 1));
@@ -166,7 +176,8 @@ mod tests {
         }];
 
         let mut pkt = vec![0u8; 40];
-        pkt[0] = 0x45; pkt[9] = 6;
+        pkt[0] = 0x45;
+        pkt[9] = 6;
         pkt[12..16].copy_from_slice(&[10, 0, 0, 1]);
         pkt[16..20].copy_from_slice(&[10, 0, 0, 2]);
         pkt[22..24].copy_from_slice(&22u16.to_be_bytes());

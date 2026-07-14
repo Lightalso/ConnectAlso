@@ -18,11 +18,7 @@ impl DnsServer {
     pub async fn bind(listen_addr: &str, upstream: &str) -> Result<Self, std::io::Error> {
         let socket = UdpSocket::bind(listen_addr).await?;
         tracing::info!(%listen_addr, %upstream, "DNS server started");
-        Ok(Self {
-            socket,
-            records: HashMap::new(),
-            upstream: upstream.to_string(),
-        })
+        Ok(Self { socket, records: HashMap::new(), upstream: upstream.to_string() })
     }
 
     /// Update the DNS records from the current peer list.
@@ -66,17 +62,27 @@ impl DnsServer {
         let mut name_parts = Vec::new();
         while pos < query.len() {
             let len = query[pos] as usize;
-            if len == 0 { pos += 1; break; }
-            if len & 0xC0 != 0 { pos += 2; break; } // Compressed name — skip
+            if len == 0 {
+                pos += 1;
+                break;
+            }
+            if len & 0xC0 != 0 {
+                pos += 2;
+                break;
+            } // Compressed name — skip
             pos += 1;
-            if pos + len > query.len() { break; }
+            if pos + len > query.len() {
+                break;
+            }
             name_parts.push(std::str::from_utf8(&query[pos..pos + len]).ok()?.to_lowercase());
             pos += len;
         }
         let name = name_parts.join(".");
 
         // Skip QTYPE (2) + QCLASS (2)
-        if pos + 4 > query.len() { return None; }
+        if pos + 4 > query.len() {
+            return None;
+        }
 
         // Look up the name
         // Strip ".connectalso" suffix if present
@@ -97,11 +103,11 @@ impl DnsServer {
         resp.extend_from_slice(&query[12..pos + 4]);
         // Answer section: pointer to name + A record
         resp.extend_from_slice(&[
-            0xC0, 0x0C,       // Name pointer to offset 12
-            0x00, 0x01,       // Type: A
-            0x00, 0x01,       // Class: IN
+            0xC0, 0x0C, // Name pointer to offset 12
+            0x00, 0x01, // Type: A
+            0x00, 0x01, // Class: IN
             0x00, 0x00, 0x00, 60, // TTL: 60 seconds
-            0x00, 0x04,       // RDLENGTH: 4
+            0x00, 0x04, // RDLENGTH: 4
         ]);
         resp.extend_from_slice(&ip.octets());
 
