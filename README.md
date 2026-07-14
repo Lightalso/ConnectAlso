@@ -267,23 +267,85 @@ ConnectAlso/
 
 ## 本地开发
 
-当前仓库仍处于初始化阶段，尚未提供可构建的 ConnectAlso 实现。待 Rust Workspace 建立后，本节将补充：
+### 环境要求
 
-- Rust 工具链版本；
-- 系统依赖和 TUN 权限配置；
-- 构建、测试及运行命令；
-- 本地控制服务和中继启动方式；
-- NAT 仿真与端到端测试方法。
+- Rust 1.85+ (https://rustup.rs)
+- 系统 TUN 支持（Linux: `/dev/net/tun`, macOS: 自动, Windows: Wintun）
+- 建议使用 Docker 运行服务端组件
 
-计划中的基础开发命令形式如下，**目前仅作结构示例**：
+### 构建
 
 ```bash
+# 构建所有组件
+cargo build --release
+
+# 运行测试
+cargo test --workspace
+
+# 代码检查
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features
-cargo test --workspace
 ```
 
-请勿将本节中的示例视为当前仓库已具备的功能。
+### 启动开发环境
+
+```bash
+# 终端 1: 控制服务
+cargo run -p connectalso-control -- --listen 127.0.0.1:3000
+
+# 终端 2: 中继服务
+cargo run -p connectalso-relay -- --listen 127.0.0.1:33478
+
+# 终端 3: STUN 服务
+cargo run -p connectalso-stun -- --listen 127.0.0.1:3478
+
+# 终端 4: 守护进程
+cargo run -p connectalso-daemon -- --hostname dev-machine
+
+# 终端 5: CLI
+cargo run -p connectalso-cli -- status
+```
+
+### Docker 开发环境
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up -d
+```
+
+### 项目结构
+
+```
+ConnectAlso/
+├── crates/           # 核心库
+│   ├── core/         # 公共类型与协议定义
+│   ├── crypto/       # X25519 + ChaCha20-Poly1305 加密
+│   ├── tunnel/       # 加密 UDP 隧道、路径管理、中继客户端
+│   ├── nat/          # STUN、NAT 探测、UDP 打洞
+│   ├── relay-proto/  # 中继协议
+│   └── platform/     # TUN 设备抽象
+├── apps/             # 应用程序
+│   ├── daemon/       # 后台守护进程
+│   ├── cli/          # 命令行工具
+│   ├── desktop/      # 系统托盘应用
+│   └── mobile/       # 移动端集成（计划中）
+├── services/         # 服务端
+│   ├── control/      # 控制服务（设备管理、IPv4 分配）
+│   ├── relay/        # 中继服务
+│   └── stun/         # STUN 服务
+├── deploy/           # 部署配置
+│   ├── docker/       # Docker Compose 自建方案
+│   ├── systemd/      # Linux systemd 服务
+│   ├── launchd/      # macOS LaunchDaemon
+│   └── packaging/    # 安装包构建脚本
+├── docs/             # 文档
+│   ├── guide/        # 部署指南
+│   └── decisions/    # 技术决策记录
+└── tests/            # 集成测试
+```
+
+> 📖 **部署文档**: [面向非开发者的部署指南](docs/guide/deployment.md)
+>
+> 📖 **技术决策**: [M0 决策记录](docs/decisions/)
 
 ## 参与贡献
 
