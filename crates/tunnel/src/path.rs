@@ -71,7 +71,7 @@ impl PathManager {
     /// Uses a new ephemeral socket for STUN + hole punching.
     /// On success, stores the tunnel and switches to `Direct` mode.
     /// On failure, reschedules with exponential backoff.
-    pub async fn try_direct(&mut self, direct_tunnel: Tunnel) -> Result<(), TunnelError> {
+    pub async fn try_direct(&mut self, mut direct_tunnel: Tunnel) -> Result<(), TunnelError> {
         // Verify connectivity with a probe
         match direct_tunnel.send_to(b"PROBE", self.direct_peer).await {
             Ok(_) => {
@@ -128,7 +128,6 @@ impl PathManager {
 pub async fn ping_pong(tunnel: &mut Tunnel, peer: SocketAddr, timeout: Duration) -> Result<(), TunnelError> {
     match tokio::time::timeout(timeout, async {
         tunnel.send_to(b"PING", peer).await?;
-        let mut buf = [0u8; 4];
         let (received, _from) = tokio::time::timeout(timeout, tunnel.recv_from())
             .await
             .map_err(|_| TunnelError::Io(std::io::Error::new(std::io::ErrorKind::TimedOut, "pong timeout")))??;
