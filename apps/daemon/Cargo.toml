@@ -1,0 +1,25 @@
+[package]
+name = "connectalso-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "connectalso-daemon"
+path = "src/main.rs"
+
+[dependencies]
+connectalso-core.workspace = true
+connectalso-crypto.workspace = true
+connectalso-tunnel.workspace = true
+connectalso-nat.workspace = true
+connectalso-platform.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

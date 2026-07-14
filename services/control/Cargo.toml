@@ -1,0 +1,28 @@
+[package]
+name = "connectalso-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "connectalso-control"
+path = "src/main.rs"
+
+[dependencies]
+connectalso-core.workspace = true
+connectalso-crypto.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

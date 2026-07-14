@@ -1,0 +1,20 @@
+[package]
+name = "connectalso-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[dependencies]
+connectalso-core.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+[features]
+default = []
+
+[lints]
+workspace = true

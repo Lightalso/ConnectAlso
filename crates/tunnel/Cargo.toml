@@ -1,0 +1,18 @@
+[package]
+name = "connectalso-tunnel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+connectalso-core.workspace = true
+connectalso-crypto.workspace = true
+bytes.workspace = true
+rand.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

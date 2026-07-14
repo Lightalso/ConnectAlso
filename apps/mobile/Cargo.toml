@@ -1,0 +1,18 @@
+[package]
+name = "connectalso-mobile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "connectalso_mobile"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+connectalso-core.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

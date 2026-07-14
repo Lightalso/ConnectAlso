@@ -1,0 +1,16 @@
+[package]
+name = "connectalso-relay-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+connectalso-core.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
