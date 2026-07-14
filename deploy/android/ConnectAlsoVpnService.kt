@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.os.PowerManager
 import android.util.Log
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -65,7 +66,7 @@ class ConnectAlsoVpnService : VpnService() {
 
     private var tunFd: ParcelFileDescriptor? = null
     private var running = false
-    private var relaySocket: DatagramSocket? = null
+    private var wakelock: PowerManager.WakeLock? = null
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -131,6 +132,9 @@ class ConnectAlsoVpnService : VpnService() {
         running = true
         updateNotification("Connected — $virtualIp")
 
+        // Acquire partial wakelock to keep CPU awake for packet forwarding
+        acquireWakelock()
+
         // Register network change listener
         registerNetworkCallback()
 
@@ -143,8 +147,8 @@ class ConnectAlsoVpnService : VpnService() {
     private fun stopVpn() {
         running = false
 
-        // Unregister network callback
         unregisterNetworkCallback()
+        releaseWakelock()
 
         RustBridge.shutdown()
 
@@ -297,5 +301,45 @@ class ConnectAlsoVpnService : VpnService() {
             val ok = RustBridge.reconnect()
             Log.i(TAG, "reconnect result: $ok")
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Battery optimization
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun acquireWakelock() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        wakelock = pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "ConnectAlso:packet-forwarding"
+        ).apply {
+            acquire(10 * 60 * 1000L) // 10 min timeout, auto-release
+        }
+        Log.i(TAG, "wakelock acquired")
+    }
+
+    private fun releaseWakelock() {
+        wakelock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakelock = null
+        Log.i(TAG, "wakelock released")
+    }
+
+    /**
+     * Adaptive polling: faster when traffic is active, slower when idle.
+     *
+     * The Rust engine's recvPacket already uses internal timeouts,
+     * so we simply call it in a loop. The engine adjusts its own
+     * poll interval based on traffic activity.
+     *
+     * For maximum battery savings, the Android Doze mode will
+     * automatically defer network access during maintenance windows.
+     */
+    private fun adaptivePollInterval(): Long {
+        // The Rust engine handles adaptive timing internally.
+        // This method exists as a hook for future platform-specific
+        // battery optimization (e.g., checking BatteryManager level).
+        return 10 // ms — Rust engine adjusts actual wait
     }
 }

@@ -119,12 +119,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func startPacketLoop() {
         readLoopActive = true
-
-        // Outbound: TUN → Rust engine → network
         readOutboundPackets()
-
-        // Inbound: Rust engine → TUN
-        readInboundPackets()
+        readInboundPacketsAdaptive()
     }
 
     private func readOutboundPackets() {
@@ -152,24 +148,33 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    private func readInboundPackets() {
+    private func readInboundPacketsAdaptive() {
         DispatchQueue.global(qos: .default).async { [weak self] in
             guard let self = self else { return }
-
             var outBuf = [UInt8](repeating: 0, count: 65536)
+            var idleCount = 0
 
             while self.readLoopActive {
-                let received = connectalso_recv_packet(&outBuf, UInt32(outBuf.count))
+                // Adaptive timeout: 10ms active, 100ms idle, 500ms sleep
+                let timeout = idleCount < 50 ? 10 :
+                              idleCount < 300 ? 100 : 500
+
+                let received = connectalso_recv_packet_timeout(&outBuf, UInt32(outBuf.count), UInt32(timeout))
 
                 if received > 0 {
                     let data = Data(bytes: outBuf, count: Int(received))
                     self.packetFlow.writePackets([data], withProtocols: [NSNumber(value: AF_INET)])
+                    idleCount = 0 // Reset on traffic
                 } else {
-                    // No data — brief sleep to avoid busy-waiting
-                    Thread.sleep(forTimeInterval: 0.01)
+                    idleCount += 1
                 }
             }
         }
+    }
+
+    // Deprecated: replaced by readInboundPacketsAdaptive
+    private func readInboundPackets() {
+        readInboundPacketsAdaptive()
     }
 
     // ── Helpers ──

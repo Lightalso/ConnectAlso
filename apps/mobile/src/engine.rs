@@ -22,6 +22,37 @@ pub enum ConnState {
     Reconnecting,
 }
 
+/// Activity level for battery optimization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivityLevel {
+    /// Active traffic — frequent polling, low latency
+    Active,
+    /// Light traffic — moderate polling
+    Idle,
+    /// No recent traffic — slow polling, maximum battery save
+    Sleep,
+}
+
+impl ActivityLevel {
+    /// Poll interval for inbound packet checking (milliseconds).
+    pub const fn poll_interval_ms(self) -> u64 {
+        match self {
+            Self::Active => 10,
+            Self::Idle => 100,
+            Self::Sleep => 500,
+        }
+    }
+
+    /// Keepalive interval for relay registration refresh (seconds).
+    pub const fn keepalive_interval_secs(self) -> u64 {
+        match self {
+            Self::Active => 30,
+            Self::Idle => 60,
+            Self::Sleep => 120,
+        }
+    }
+}
+
 /// Persistent state for the mobile tunnel engine.
 struct TunnelEngine {
     keypair: KeyPair,
@@ -32,6 +63,8 @@ struct TunnelEngine {
     http: reqwest::Client,
     control_url: String,
     state: ConnState,
+    activity: ActivityLevel,
+    last_traffic: std::time::Instant,
     /// Packets queued during reconnection.
     outbound_queue: Vec<(Vec<u8>, Ipv4Addr)>,
 }
@@ -97,6 +130,8 @@ impl TunnelEngine {
             http,
             control_url: control_url.to_string(),
             state: ConnState::Connected,
+            activity: ActivityLevel::Active,
+            last_traffic: std::time::Instant::now(),
             outbound_queue: Vec::new(),
         })
     }
@@ -195,11 +230,12 @@ impl TunnelEngine {
     }
 
     async fn send_to_peer(&mut self, packet: &[u8], dst_ip: Ipv4Addr) -> anyhow::Result<()> {
+        self.mark_traffic();
         if self.state == ConnState::Reconnecting {
             if self.outbound_queue.len() < MAX_QUEUED_PACKETS {
                 self.outbound_queue.push((packet.to_vec(), dst_ip));
             }
-            return Ok(()); // Silently queue
+            return Ok(());
         }
         self.send_to_peer_inner(packet, dst_ip).await
     }
@@ -232,6 +268,48 @@ impl TunnelEngine {
 
     fn state(&self) -> ConnState {
         self.state
+    }
+
+    fn activity(&self) -> ActivityLevel {
+        self.activity
+    }
+
+    /// Transition to a lower activity level after idle timeout.
+    fn update_activity(&mut self) {
+        let elapsed = self.last_traffic.elapsed();
+        self.activity = if elapsed.as_secs() < 5 {
+            ActivityLevel::Active
+        } else if elapsed.as_secs() < 30 {
+            ActivityLevel::Idle
+        } else {
+            ActivityLevel::Sleep
+        };
+    }
+
+    /// Record traffic to keep activity level high.
+    fn mark_traffic(&mut self) {
+        self.last_traffic = std::time::Instant::now();
+        if self.activity != ActivityLevel::Active {
+            self.activity = ActivityLevel::Active;
+        }
+    }
+
+    /// Current poll interval (ms) based on activity.
+    fn poll_interval_ms(&self) -> u64 {
+        self.activity.poll_interval_ms()
+    }
+
+    /// Current keepalive interval (secs) based on activity.
+    fn keepalive_interval_secs(&self) -> u64 {
+        self.activity.keepalive_interval_secs()
+    }
+
+    /// Send keepalive to all connected relay peers.
+    async fn send_keepalives(&self) {
+        for peer in self.peers.values() {
+            let relay = peer.relay.lock().await;
+            let _ = relay.keepalive().await;
+        }
     }
 }
 
