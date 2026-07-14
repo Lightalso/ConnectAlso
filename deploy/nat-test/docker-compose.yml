@@ -1,0 +1,147 @@
+# ConnectAlso NAT 穿越测试环境
+#
+# 拓扑:
+#   internet (public 网络, 172.30.0.0/24)
+#     ├── stun      (172.30.0.10)  — STUN 服务器
+#     ├── relay     (172.30.0.20)  — 中继服务器
+#     ├── gateway-a  (172.30.0.100, 内部: 10.0.1.1/24)
+#     │   └── peer-a (10.0.1.10)     — 客户端 A (NAT 后)
+#     └── gateway-b  (172.30.0.200, 内部: 10.0.2.1/24)
+#         └── peer-b (10.0.2.10)     — 客户端 B (NAT 后)
+#
+# 启动: docker compose -f deploy/nat-test/docker-compose.yml up -d
+# 测试: docker exec -it nat-peer-a bash
+# 停止: docker compose -f deploy/nat-test/docker-compose.yml down
+
+services:
+  # ── 公共基础设施 ──
+
+  stun:
+    build:
+      context: ../..
+      dockerfile: deploy/nat-test/docker/Dockerfile
+    container_name: nat-stun
+    hostname: stun
+    cap_add:
+      - NET_ADMIN
+    networks:
+      public:
+        ipv4_address: 172.30.0.10
+    command: sleep infinity
+
+  relay:
+    build:
+      context: ../..
+      dockerfile: deploy/nat-test/docker/Dockerfile
+    container_name: nat-relay
+    hostname: relay
+    cap_add:
+      - NET_ADMIN
+    networks:
+      public:
+        ipv4_address: 172.30.0.20
+    command: sleep infinity
+
+  # ── NAT 网关 A + 对等端 A ──
+
+  gateway-a:
+    build:
+      context: ../..
+      dockerfile: deploy/nat-test/docker/Dockerfile
+    container_name: nat-gateway-a
+    hostname: gateway-a
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.forwarding=1
+    networks:
+      public:
+        ipv4_address: 172.30.0.100
+      net-a:
+        ipv4_address: 10.0.1.1
+    volumes:
+      - ./scripts/gateway-a.sh:/init.sh:ro
+    command: /bin/bash -c "/init.sh && sleep infinity"
+
+  peer-a:
+    build:
+      context: ../..
+      dockerfile: deploy/nat-test/docker/Dockerfile
+    container_name: nat-peer-a
+    hostname: peer-a
+    cap_add:
+      - NET_ADMIN
+    networks:
+      net-a:
+        ipv4_address: 10.0.1.10
+    # 路由: 默认网关指向 gateway-a
+    command: >
+      /bin/bash -c "
+        ip route del default 2>/dev/null || true;
+        ip route add default via 10.0.1.1;
+        echo 'Peer A ready (10.0.1.10, gateway 10.0.1.1)';
+        sleep infinity
+      "
+
+  # ── NAT 网关 B + 对等端 B ──
+
+  gateway-b:
+    build:
+      context: ../..
+      dockerfile: deploy/nat-test/docker/Dockerfile
+    container_name: nat-gateway-b
+    hostname: gateway-b
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.forwarding=1
+    networks:
+      public:
+        ipv4_address: 172.30.0.200
+      net-b:
+        ipv4_address: 10.0.2.1
+    volumes:
+      - ./scripts/gateway-b.sh:/init.sh:ro
+    command: /bin/bash -c "/init.sh && sleep infinity"
+
+  peer-b:
+    build:
+      context: ../..
+      dockerfile: deploy/nat-test/docker/Dockerfile
+    container_name: nat-peer-b
+    hostname: peer-b
+    cap_add:
+      - NET_ADMIN
+    networks:
+      net-b:
+        ipv4_address: 10.0.2.10
+    command: >
+      /bin/bash -c "
+        ip route del default 2>/dev/null || true;
+        ip route add default via 10.0.2.1;
+        echo 'Peer B ready (10.0.2.10, gateway 10.0.2.1)';
+        sleep infinity
+      "
+
+networks:
+  public:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  net-a:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+  net-b:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
