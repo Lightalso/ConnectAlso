@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 connectalso-core.workspace = true
+tun2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true

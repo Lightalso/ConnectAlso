@@ -29,6 +29,8 @@ tower = "0.5"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "sqlite"] }
 prost = "0.13"
 bytes = "1"
+tun2 = { version = "4", features = ["tokio"] }
+ipnet = "2"
 
 connectalso-core = { path = "crates/core" }
 connectalso-crypto = { path = "crates/crypto" }
