@@ -1,3 +1,8 @@
+//! Encrypted UDP tunnel, path management, and relay client.
+//!
+//! Provides ChaCha20-Poly1305 encrypted tunnels, path switching between
+//! direct P2P and relay, and multi-region relay pool management.
+
 use std::net::SocketAddr;
 
 use connectalso_crypto::key_exchange::{CryptoError, SessionCipher};

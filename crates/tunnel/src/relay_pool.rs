@@ -150,9 +150,13 @@ impl RelayPool {
 /// Summary of a relay server for diagnostics display.
 #[derive(Debug)]
 pub struct RelaySummary {
+    /// Server address.
     pub addr: SocketAddr,
+    /// Measured latency in milliseconds, if known.
     pub latency_ms: Option<u64>,
+    /// Whether the relay is currently considered healthy.
     pub healthy: bool,
+    /// Whether this relay is the active (selected) one.
     pub active: bool,
 }
 
