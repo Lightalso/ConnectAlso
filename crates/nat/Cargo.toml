@@ -7,9 +7,13 @@ repository.workspace = true
 
 [dependencies]
 connectalso-core.workspace = true
+rand.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true
