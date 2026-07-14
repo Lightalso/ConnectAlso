@@ -6,6 +6,7 @@ use jni::JNIEnv;
 
 use crate::engine;
 
+/// JNI 函数前缀：Java_com_connectalso_mobile_RustBridge_<method>
 /// JNI function prefix: Java_com_connectalso_mobile_RustBridge_<method>
 const CLASS_PATH: &str = "com/connectalso/mobile/RustBridge";
 
@@ -32,6 +33,11 @@ fn throw(env: &mut JNIEnv, msg: &str) {
 // JNI Exports
 // ═══════════════════════════════════════════════════════════════════
 
+/// 初始化 ConnectAlso 引擎。
+///
+/// Java 签名：
+///   native boolean init(String controlUrl, String relayServer, String hostname);
+///
 /// Initialize the ConnectAlso engine.
 ///
 /// Java signature:
@@ -68,6 +74,14 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_init(
     }
 }
 
+/// 保护 UDP socket 文件描述符，使其不被 VPN 路由捕获。
+///
+/// Java 签名：
+///   native void protectSocket(int fd);
+///
+/// 由 VpnService.protect() 通过 RustBridge 调用。
+/// 此操作可防止中继 socket 走自己的 TUN 接口。
+///
 /// Protect a UDP socket file descriptor from being routed through the VPN.
 ///
 /// Java signature:
@@ -84,6 +98,13 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_protectSocket(_env
     tracing::debug!(fd = _fd, "socket protect placeholder");
 }
 
+/// 发送来自 TUN 接口的出站数据包。
+///
+/// Java 签名：
+///   native byte[] sendPacket(byte[] packet);
+///
+/// 返回加密后的数据包，错误时返回 null。
+///
 /// Send an outgoing packet from the TUN interface.
 ///
 /// Java signature:
@@ -119,6 +140,13 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_sendPacket(
     }
 }
 
+/// 从隧道网络轮询入站数据包。
+///
+/// Java 签名：
+///   native byte[] recvPacket();
+///
+/// 返回解密后的数据包供注入 TUN，无数据时返回 null。
+///
 /// Poll for an incoming packet from the tunnel network.
 ///
 /// Java signature:
@@ -142,6 +170,11 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_recvPacket(
     }
 }
 
+/// 获取分配的虚拟 IPv4 地址。
+///
+/// Java 签名：
+///   native String getVirtualIP();
+///
 /// Get the assigned virtual IPv4 address.
 ///
 /// Java signature:
@@ -162,6 +195,11 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_getVirtualIP(env: 
     }
 }
 
+/// 关闭引擎。
+///
+/// Java 签名：
+///   native void shutdown();
+///
 /// Shut down the engine.
 ///
 /// Java signature:
@@ -171,6 +209,15 @@ pub extern "system" fn Java_com_connectalso_mobile_RustBridge_shutdown(_env: JNI
     tracing::info!("Android engine shutting down");
 }
 
+/// 网络切换后触发重连。
+///
+/// Java 签名：
+///   native boolean reconnect();
+///
+/// 当设备在 Wi-Fi 和蜂窝网络之间切换时应调用此方法。
+/// 会向控制服务重新注册、刷新节点列表并重连中继会话。
+/// 缓存的出站数据包会自动冲刷。
+///
 /// Trigger reconnection after a network change.
 ///
 /// Java signature:

@@ -2,19 +2,26 @@ import NetworkExtension
 import Network
 import os.log
 
-/// ConnectAlso Packet Tunnel Provider for iOS
+/// ConnectAlso Packet Tunnel Provider for iOS.
+/// iOS 平台的 ConnectAlso 数据包隧道提供者。
 ///
 /// This class implements the NEPacketTunnelProvider protocol to provide
 /// a virtual network interface that tunnels all traffic through ConnectAlso.
+/// 此类实现 NEPacketTunnelProvider 协议，提供虚拟网络接口，
+/// 将所有流量通过 ConnectAlso 隧道传输。
 ///
-/// ## Setup in Xcode
+/// ## Setup in Xcode / Xcode 设置
 ///
 /// 1. Add `libconnectalso_mobile.a` to your NetworkExtension target
+///    将 `libconnectalso_mobile.a` 添加到 NetworkExtension target
 /// 2. Add the bridging header with C function declarations
+///    添加包含 C 函数声明的桥接头文件
 /// 3. Set "Packet Tunnel" capability in your app target
+///    在应用 target 中启用 "Packet Tunnel" 能力
 /// 4. Configure the NetworkExtension in your app's Info.plist
+///    在应用的 Info.plist 中配置 NetworkExtension
 ///
-/// ## Bridging Header (ConnectAlso-Bridging-Header.h):
+/// ## Bridging Header / 桥接头文件 (ConnectAlso-Bridging-Header.h):
 /// ```c
 /// int32_t connectalso_init(const char *control_url, const char *stun_server,
 ///                          const char *relay_server, const char *hostname);
@@ -38,8 +45,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     private var relayServer: String = "127.0.0.1:33478"
     private var hostname: String = "ios-device"
 
-    // ── Tunnel lifecycle ──
+    // ── Tunnel lifecycle / 隧道生命周期 ──
 
+    /// Start the packet tunnel.
+    /// 启动数据包隧道。
+    ///
+    /// Initializes the Rust engine, configures TUN network settings, routes all
+    /// traffic through the tunnel, and starts network monitoring and packet loops.
+    /// 初始化 Rust 引擎，配置 TUN 网络设置，将所有流量路由到隧道，
+    /// 并启动网络监控和数据包循环。
     override func startTunnel(options: [String: NSObject]?,
                               completionHandler: @escaping (Error?) -> Void) {
         os_log("ConnectAlso tunnel starting...", log: log, type: .info)
@@ -91,6 +105,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    /// Stop the packet tunnel.
+    /// 停止数据包隧道。
+    ///
+    /// Stops the packet read loop and shuts down the Rust engine.
+    /// 停止数据包读取循环并关闭 Rust 引擎。
     override func stopTunnel(with reason: NEProviderStopReason,
                               completionHandler: @escaping () -> Void) {
         os_log("Tunnel stopping...", log: log, type: .info)
@@ -99,6 +118,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler()
     }
 
+    /// Handle IPC messages from the container app.
+    /// 处理来自容器应用的进程间通信消息。
+    ///
+    /// Supports "status" query to return the current virtual IP address.
+    /// 支持 "status" 查询以返回当前虚拟 IP 地址。
     override func handleAppMessage(_ messageData: Data,
                                     completionHandler: ((Data?) -> Void)?) {
         // Handle messages from the container app
@@ -115,14 +139,23 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler?(nil)
     }
 
-    // ── Packet forwarding loop ──
+    // ── Packet forwarding loop / 数据包转发循环 ──
 
+    /// Start the bidirectional packet forwarding loops.
+    /// 启动双向数据包转发循环。
     private func startPacketLoop() {
         readLoopActive = true
         readOutboundPackets()
         readInboundPacketsAdaptive()
     }
 
+    /// Read outbound packets from TUN and forward them to the Rust engine.
+    /// 从 TUN 读取出站数据包并转发到 Rust 引擎。
+    ///
+    /// Continuously reads packets using packetFlow.readPackets, sends each
+    /// through the Rust engine, and writes locally-delivered packets back to TUN.
+    /// 持续使用 packetFlow.readPackets 读取数据包，通过 Rust 引擎发送，
+    /// 并将本地投递的数据包写回 TUN。
     private func readOutboundPackets() {
         packetFlow.readPackets { [weak self] packets, protocols in
             guard let self = self, self.readLoopActive else { return }
@@ -148,6 +181,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
+    /// Poll for inbound packets from the Rust engine with adaptive timing.
+    /// 以自适应时间间隔从 Rust 引擎轮询入站数据包。
+    ///
+    /// Uses shorter poll intervals when traffic is active and longer intervals
+    /// when idle, to balance latency and battery consumption.
+    /// 流量活跃时使用较短的轮询间隔，空闲时使用较长的间隔，
+    /// 以平衡延迟和电池消耗。
     private func readInboundPacketsAdaptive() {
         DispatchQueue.global(qos: .default).async { [weak self] in
             guard let self = self else { return }
@@ -177,7 +217,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         readInboundPacketsAdaptive()
     }
 
-    // ── Helpers ──
+    // ── Helpers / 辅助方法 ──
 
     private func getVirtualIP() -> String {
         var buf = [CChar](repeating: 0, count: 64)
@@ -188,8 +228,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         return "100.64.0.1"
     }
 
-    // ── Network path monitoring (Wi-Fi ↔ Cellular) ──
+    // ── Network path monitoring (Wi-Fi ↔ Cellular) / 网络路径监控（Wi-Fi ↔ 蜂窝网络）──
 
+    /// Start monitoring network path changes for Wi-Fi/Cellular switching.
+    /// 启动网络路径变化监控，检测 Wi-Fi 与蜂窝网络切换。
+    ///
+    /// Triggers a Rust engine reconnect when the active network interface changes,
+    /// ensuring the P2P connections survive network transitions.
+    /// 当活跃网络接口变化时触发 Rust 引擎重连，
+    /// 确保 P2P 连接在网络切换后继续工作。
     private func startNetworkMonitor() {
         pathMonitor = NWPathMonitor()
         pathMonitor?.pathUpdateHandler = { [weak self] path in

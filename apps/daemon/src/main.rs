@@ -1,3 +1,4 @@
+//! ConnectAlso 守护进程 — 用于虚拟组网的后台服务。
 //! ConnectAlso daemon — background service for virtual networking.
 
 use std::collections::HashMap;
@@ -33,32 +34,58 @@ use tracing_subscriber::Layer as _;
 use uuid::Uuid;
 
 // ════════════════════════════════════════════════════════════════════
+//  配置
 //  Config
 // ════════════════════════════════════════════════════════════════════
+/// 守护进程持久化配置。
+/// Persistent daemon configuration.
 #[derive(Debug, Serialize, Deserialize)]
 struct DaemonConfig {
+    /// 设备唯一标识符。
+    /// Unique device identifier.
     device_id: Uuid,
+    /// 公钥（十六进制编码）。
+    /// Public key (hex-encoded).
     public_key_hex: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     virtual_ip: String,
+    /// 控制服务 URL。
+    /// Control service URL.
     control_url: String,
+    /// STUN 服务器地址。
+    /// STUN server address.
     stun_server: String,
+    /// 中继服务器地址列表。
+    /// Relay server addresses.
     #[serde(default)]
     relay_servers: Vec<String>,
+    /// 主机名。
+    /// Hostname.
     hostname: String,
 }
 
 impl DaemonConfig {
+    /// 返回配置文件的存储路径。
+    /// Return the path to the configuration file.
+    ///
+    /// 默认位于用户配置目录下的 `connectalso/config.json`。
+    /// Defaults to `connectalso/config.json` in the user's config directory.
     fn path() -> PathBuf {
         let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("connectalso");
         std::fs::create_dir_all(&base).ok();
         base.join("config.json")
     }
 
+    /// 从文件加载配置，若文件不存在或解析失败则返回 `None`。
+    /// Load configuration from file; returns `None` if missing or unparseable.
     fn load() -> Option<Self> {
         let data = std::fs::read_to_string(Self::path()).ok()?;
         serde_json::from_str(&data).ok()
     }
 
+    /// 将当前配置序列化为 JSON 并写入文件。
+    /// Serialize and write the current configuration as JSON.
     fn save(&self) {
         if let Ok(json) = serde_json::to_string_pretty(self) {
             let _ = std::fs::write(Self::path(), json);
@@ -67,21 +94,38 @@ impl DaemonConfig {
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  控制 API 数据传输对象
 //  Control API DTOs
 // ════════════════════════════════════════════════════════════════════
+/// 设备注册请求体。
+/// Device registration request body.
 #[derive(Debug, Serialize)]
 struct RegisterRequest {
+    /// 32 字节公钥。
+    /// 32-byte public key.
     public_key: [u8; 32],
+    /// 主机名。
+    /// Hostname.
     hostname: String,
 }
 
+/// 设备注册响应体。
+/// Device registration response body.
 #[derive(Debug, Deserialize)]
 struct RegisterResponse {
+    /// 分配的设备 ID。
+    /// Assigned device identifier.
     device_id: Uuid,
+    /// 分配的 IPv4 地址。
+    /// Assigned IPv4 address.
     ipv4: String,
+    /// 网络地址。
+    /// Network address.
     #[serde(default)]
     #[allow(dead_code)]
     network: String,
+    /// 注册状态：approved / pending。
+    /// Registration status: approved / pending.
     #[serde(default = "default_status")]
     status: String,
 }
@@ -90,103 +134,219 @@ fn default_status() -> String {
     "approved".to_string()
 }
 
+/// 对等节点信息。
+/// Peer information from the control service.
 #[derive(Debug, Deserialize, Clone)]
 struct PeerInfo {
+    /// 设备 ID。
+    /// Device identifier.
     device_id: Uuid,
+    /// IPv4 地址。
+    /// IPv4 address.
     ipv4: String,
+    /// 32 字节公钥。
+    /// 32-byte public key.
     public_key: [u8; 32],
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 最后一次活动距今秒数。
+    /// Seconds since last activity.
     #[allow(dead_code)]
     last_seen_secs: i64,
 }
 
+/// 对等节点列表响应。
+/// Peer list response from the control service.
 #[derive(Debug, Deserialize)]
 struct PeersResponse {
+    /// 对等节点列表。
+    /// List of peers.
     peers: Vec<PeerInfo>,
 }
 
+/// NAT 候选地址发布请求。
+/// Request to publish NAT candidate addresses.
 #[derive(Debug, Serialize)]
 struct CandidatePublish {
+    /// 设备 ID。
+    /// Device identifier.
     device_id: Uuid,
+    /// 候选地址列表。
+    /// List of candidate addresses.
     candidates: Vec<String>,
 }
 
+/// NAT 候选地址列表响应。
+/// Response containing NAT candidate addresses for a peer.
 #[derive(Debug, Deserialize)]
 struct CandidateList {
+    /// 设备 ID。
+    /// Device identifier.
     #[allow(dead_code)]
     device_id: Uuid,
+    /// 候选地址列表。
+    /// List of candidate addresses.
     candidates: Vec<String>,
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  守护进程状态
 //  Daemon state
 // ════════════════════════════════════════════════════════════════════
+/// 与单个对等节点的连接状态与隧道管理。
+/// Connection state and tunnel management for a single peer.
 struct PeerLink {
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     vip: Ipv4Addr,
+    /// 对等节点公钥。
+    /// Peer public key.
     #[allow(dead_code)]
     public_key: [u8; 32],
+    /// 路径管理器（中继 / P2P 直连）。
+    /// Path manager (relay / direct P2P).
     path: PathManager,
+    /// P2P 重试间隔（毫秒），支持指数退避。
+    /// P2P retry interval (ms) with exponential backoff.
     p2p_retry_ms: u64,
 }
 
+/// 守护进程全局共享状态。
+/// Global shared state of the daemon.
 struct SharedState {
+    /// 本机设备 ID。
+    /// Local device identifier.
     device_id: Uuid,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     virtual_ip: Ipv4Addr,
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 守护进程启动时间。
+    /// Daemon start time.
     started_at: Instant,
+    /// 虚拟 IP → 设备 ID 的路由映射。
+    /// Routing map: virtual IP → device ID.
     ip_route: HashMap<Ipv4Addr, Uuid>,
+    /// 已连接的对等节点映射。
+    /// Map of connected peers.
     peer_links: HashMap<Uuid, Arc<Mutex<PeerLink>>>,
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  状态 API 类型
 //  Status API types
 // ════════════════════════════════════════════════════════════════════
+/// 状态 API 响应体。
+/// Status API response body.
 #[derive(Debug, Serialize)]
 struct StatusResponse {
+    /// 设备唯一标识符。
+    /// Unique device identifier.
     device_id: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     virtual_ip: String,
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 运行时长（秒）。
+    /// Uptime in seconds.
     uptime_secs: u64,
+    /// 已连接的对等节点数量。
+    /// Number of connected peers.
     peer_count: usize,
+    /// 对等节点列表。
+    /// List of connected peers.
     peers: Vec<StatusPeer>,
 }
 
+/// 对等节点状态条目。
+/// Status entry for a connected peer.
 #[derive(Debug, Serialize)]
 struct StatusPeer {
+    /// 对等节点设备 ID。
+    /// Peer device identifier.
     device_id: String,
+    /// 对等节点虚拟 IP。
+    /// Peer virtual IP address.
     virtual_ip: String,
+    /// 对等节点主机名。
+    /// Peer hostname.
     hostname: String,
+    /// 连接路径类型（direct / relay / probing）。
+    /// Connection path type (direct / relay / probing).
     path: String,
 }
 
+/// 关闭 API 响应体。
+/// Shutdown API response body.
 #[derive(Debug, Serialize)]
 struct ShutdownResponse {
+    /// 响应消息。
+    /// Response message.
     message: String,
 }
 
+/// 诊断 API 响应体。
+/// Diagnostics API response body.
 #[derive(Debug, Serialize)]
 struct DiagnosticsResponse {
+    /// 守护进程自身检查。
+    /// Daemon self-check result.
     daemon: CheckResult,
+    /// 控制服务检查。
+    /// Control service check result.
     control: CheckResult,
+    /// STUN 服务检查。
+    /// STUN service check result.
     stun: CheckResult,
+    /// 中继服务检查。
+    /// Relay service check result.
     relay: CheckResult,
+    /// TUN 虚拟网卡检查。
+    /// TUN virtual interface check result.
     tun: CheckResult,
+    /// 各对等节点的诊断结果。
+    /// Per-peer diagnostic results.
     peers: Vec<PeerDiag>,
 }
 
+/// 单项诊断检查结果。
+/// Result of a single diagnostic check.
 #[derive(Debug, Serialize)]
 struct CheckResult {
+    /// 状态："ok" / "warn" / "error"。
+    /// Status: "ok" / "warn" / "error".
     status: &'static str,
+    /// 详细信息。
+    /// Detailed description.
     detail: String,
+    /// 延迟（毫秒）。
+    /// Latency in milliseconds.
     latency_ms: Option<u64>,
 }
 
+/// 对等节点诊断条目。
+/// Diagnostic entry for a peer.
 #[derive(Debug, Serialize)]
 struct PeerDiag {
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     virtual_ip: String,
+    /// 连接路径类型。
+    /// Connection path type.
     path: String,
+    /// 是否可达。
+    /// Whether the peer is reachable.
     reachable: bool,
 }
 
@@ -196,6 +356,8 @@ struct PeerDiag {
 #[derive(Parser)]
 #[command(name = "connectalso-daemon")]
 #[command(about = "ConnectAlso Desktop Alpha")]
+/// 守护进程命令行参数。
+/// Daemon command-line arguments.
 struct Cli {
     #[arg(long, default_value = "http://127.0.0.1:3000")]
     control_url: String,
@@ -446,6 +608,11 @@ async fn main() -> anyhow::Result<()> {
 // ════════════════════════════════════════════════════════════════════
 //  P2P helpers
 // ════════════════════════════════════════════════════════════════════
+/// 通过 STUN 服务发现本机的 NAT 候选地址。
+/// Discover local NAT candidate addresses via STUN.
+///
+/// 同时获取公网地址和本地地址。
+/// Returns both public and local addresses.
 async fn discover_candidates(stun_server: SocketAddr) -> Vec<String> {
     let mut candidates = Vec::new();
     if let Ok(stun) = StunClient::bind().await {
@@ -459,6 +626,8 @@ async fn discover_candidates(stun_server: SocketAddr) -> Vec<String> {
     candidates
 }
 
+/// 将本机候选地址发布到控制服务，供对等节点获取。
+/// Publish local candidate addresses to the control service for peer discovery.
 async fn publish_candidates(http: &reqwest::Client, ctl: &str, id: Uuid, candidates: &[String]) {
     if candidates.is_empty() {
         return;
@@ -470,6 +639,13 @@ async fn publish_candidates(http: &reqwest::Client, ctl: &str, id: Uuid, candida
         .await;
 }
 
+/// 从控制服务获取指定对等节点的候选地址列表。
+/// Fetch the candidate address list for a given peer from the control service.
+///
+/// # Returns
+///
+/// 解析后的 [`SocketAddr`] 列表，获取失败返回空列表。
+/// Parsed [`SocketAddr`] list, or empty on failure.
 async fn get_peer_candidates(http: &reqwest::Client, ctl: &str, peer_id: Uuid) -> Vec<SocketAddr> {
     let resp = http.get(format!("{ctl}/api/v1/candidates/{peer_id}")).send().await;
     match resp {
@@ -482,6 +658,18 @@ async fn get_peer_candidates(http: &reqwest::Client, ctl: &str, peer_id: Uuid) -
     }
 }
 
+/// 从控制服务同步对等节点列表并为每个节点建立中继连接。
+/// Sync peer list from control service and establish relay connections for each.
+///
+/// # Returns
+///
+/// 返回 IP 路由映射和对等节点链接映射。
+/// Returns IP routing map and peer links map.
+///
+/// # Errors
+///
+/// 如果 HTTP 请求或 IPv4 解析失败则返回错误。
+/// Returns an error if HTTP request or IPv4 parsing fails.
 async fn connect_peers(
     http: &reqwest::Client,
     control_url: &str,
@@ -518,6 +706,11 @@ async fn connect_peers(
     Ok((ip_route, peer_links))
 }
 
+/// 对所有未直连的对等节点尝试 P2P 打洞。
+/// Attempt P2P hole punching for all peers not already on a direct path.
+///
+/// 对已直连的节点跳过；打洞失败时执行指数退避。
+/// Skips peers already on a direct path; applies exponential backoff on failure.
 async fn attempt_p2p_for_all(
     peer_links: &HashMap<Uuid, Arc<Mutex<PeerLink>>>,
     http: &reqwest::Client,
@@ -563,6 +756,13 @@ async fn attempt_p2p_for_all(
 // ════════════════════════════════════════════════════════════════════
 //  Helpers
 // ════════════════════════════════════════════════════════════════════
+/// 从原始 IPv4 数据包中提取目标 IP 地址（字节 16-19）。
+/// Extract the destination IPv4 address from a raw packet (bytes 16-19).
+///
+/// # Returns
+///
+/// 如果数据包长度不足 20 或不是 IPv4 则返回 `None`。
+/// Returns `None` if the packet is shorter than 20 bytes or not IPv4.
 fn parse_dst_ip(packet: &[u8]) -> Option<Ipv4Addr> {
     if packet.len() < 20 {
         return None;
@@ -574,6 +774,8 @@ fn parse_dst_ip(packet: &[u8]) -> Option<Ipv4Addr> {
     }
 }
 
+/// 将字节切片编码为十六进制字符串。
+/// Encode a byte slice as a hexadecimal string.
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -581,6 +783,8 @@ fn hex_encode(bytes: &[u8]) -> String {
 // ════════════════════════════════════════════════════════════════════
 //  Status API
 // ════════════════════════════════════════════════════════════════════
+/// `GET /status` 处理函数：返回守护进程运行状态。
+/// `GET /status` handler: return current daemon status.
 async fn handle_status(State(state): State<Arc<Mutex<SharedState>>>) -> Json<StatusResponse> {
     let s = state.lock().await;
 
@@ -610,10 +814,17 @@ async fn handle_status(State(state): State<Arc<Mutex<SharedState>>>) -> Json<Sta
     })
 }
 
+/// `POST /shutdown` 处理函数：返回关闭确认消息。
+/// `POST /shutdown` handler: return shutdown acknowledgement.
 async fn handle_shutdown(State(_state): State<Arc<Mutex<SharedState>>>) -> Json<ShutdownResponse> {
     Json(ShutdownResponse { message: "shutdown initiated".into() })
 }
 
+/// `GET /diagnostics` 处理函数：运行综合网络诊断。
+/// `GET /diagnostics` handler: run comprehensive network diagnostics.
+///
+/// 依次检查控制服务、STUN、中继、TUN 及各对等节点的连通性。
+/// Checks control service, STUN, relay, TUN, and per-peer connectivity.
 async fn handle_diagnostics(State(state): State<Arc<Mutex<SharedState>>>) -> Json<DiagnosticsResponse> {
     let s = state.lock().await;
     let config = DaemonConfig::load();
@@ -665,6 +876,8 @@ async fn handle_diagnostics(State(state): State<Arc<Mutex<SharedState>>>) -> Jso
     })
 }
 
+/// 对指定 URL 发起 HTTP GET 请求并返回检查结果。
+/// Perform an HTTP GET to the given URL and return a check result.
 async fn check_http(url: &str) -> (&'static str, String, Option<u64>) {
     let start = Instant::now();
     match reqwest::get(url).await {
@@ -677,6 +890,8 @@ async fn check_http(url: &str) -> (&'static str, String, Option<u64>) {
     }
 }
 
+/// 通过 STUN 绑定并发现公网地址，测量延迟。
+/// Perform a STUN bind/discover and measure latency.
 async fn check_stun(server: Option<SocketAddr>) -> (&'static str, String, Option<u64>) {
     let Some(server) = server else { return ("warn", "not configured".into(), None) };
     let start = Instant::now();
@@ -692,6 +907,8 @@ async fn check_stun(server: Option<SocketAddr>) -> (&'static str, String, Option
     }
 }
 
+/// 向指定 UDP 服务器发送探测包并等待响应，测量延迟。
+/// Send a probe to the given UDP server and wait for a response, measuring latency.
 async fn check_udp(server: Option<SocketAddr>, probe: &[u8]) -> (&'static str, String, Option<u64>) {
     let Some(server) = server else { return ("warn", "not configured".into(), None) };
     let start = Instant::now();

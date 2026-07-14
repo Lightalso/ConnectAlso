@@ -5,6 +5,12 @@ use tracing::info;
 use crate::nat_type::NatType;
 use crate::stun::{StunClient, StunError};
 
+/// 最小化的 NAT 类型探测器。
+///
+/// 完整的分类（RFC 5780）需要一个支持 CHANGE-REQUEST
+/// 并拥有多个 IP 地址的 STUN 服务器。本探测器仅进行基本检查：
+/// 判断本地地址是否与 STUN 发现的公网地址不同。
+///
 /// A minimal NAT type detector.
 ///
 /// Full classification (RFC 5780) requires a STUN server with
@@ -14,12 +20,24 @@ use crate::stun::{StunClient, StunError};
 pub struct NatDetector;
 
 impl NatDetector {
+    /// 通过比较本地套接字地址与 STUN 发现的公网地址，
+    /// 检测主机是否位于 NAT 之后。
+    ///
+    /// 使用指定的 STUN 服务器。若地址一致返回 `NatType::Open`，
+    /// 若检测到 NAT 但无法在没有 CHANGE-REQUEST 支持的情况下
+    /// 确定具体类型，则返回 `NatType::Unknown`。
+    ///
     /// Detect whether the host is behind NAT by comparing the local
     /// socket address with the STUN-discovered public address.
     ///
     /// Uses the provided STUN server. Returns `NatType::Open` if the
     /// addresses match, `NatType::Unknown` if NAT is detected but
     /// the specific type cannot be classified without CHANGE-REQUEST.
+    ///
+    /// # Errors
+    ///
+    /// 当 STUN 通信失败时返回 `StunError`。
+    /// Returns `StunError` if STUN communication fails.
     pub async fn detect(stun_server: SocketAddr) -> Result<NatType, StunError> {
         let client = StunClient::bind().await?;
         let local = client.local_addr()?;

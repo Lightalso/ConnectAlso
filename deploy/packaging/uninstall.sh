@@ -1,14 +1,17 @@
 #!/bin/bash
-# ConnectAlso — Uninstall, Upgrade & Recovery
-# ===========================================
+# =============================================================================
+# Script: uninstall.sh
+# Purpose: Handles clean uninstall, version upgrade (preserving config),
+#          and recovery (reinstall after system restore) across Linux, macOS,
+#          and Windows (Git Bash/WSL).
+# 用途: 处理全新卸载、版本升级（保留配置）和恢复（系统还原后重装），
+#       支持 Linux、macOS 和 Windows（Git Bash/WSL）系统。
 #
-# This script handles clean uninstall, version upgrade (preserving config),
-# and recovery (reinstalling after system restore).
-#
-# Usage:
-#   sudo ./uninstall.sh                    # Full uninstall
-#   sudo ./uninstall.sh --upgrade 0.2.0    # Upgrade preserving config
-#   sudo ./uninstall.sh --recover          # Recover from backup
+# Usage / 用法:
+#   sudo ./uninstall.sh                    # Full uninstall / 完整卸载
+#   sudo ./uninstall.sh --upgrade 0.2.0    # Upgrade preserving config / 保留配置升级
+#   sudo ./uninstall.sh --recover          # Recover from backup / 从备份恢复
+# =============================================================================
 
 set -e
 
@@ -31,7 +34,7 @@ detect_os() {
 OS=$(detect_os)
 echo "Detected OS: $OS"
 
-# ── Backup config ──
+# ── Backup config / 备份配置 ──
 backup_config() {
     echo -e "\033[33mBacking up configuration...\033[0m"
     mkdir -p "$BACKUP_DIR"
@@ -47,7 +50,7 @@ backup_config() {
     echo "Backup saved to: $BACKUP_DIR"
 }
 
-# ── Stop services ──
+# ── Stop services / 停止服务 ──
 stop_services() {
     echo -e "\033[33mStopping services...\033[0m"
     case "$OS" in
@@ -65,7 +68,7 @@ stop_services() {
     esac
 }
 
-# ── Remove files ──
+# ── Remove files / 删除文件 ──
 remove_files() {
     local keep_config="${1:-false}"
     echo -e "\033[33mRemoving files...\033[0m"
@@ -98,7 +101,7 @@ remove_files() {
     esac
 }
 
-# ── Restore from backup ──
+# ── Restore from backup / 从备份恢复 ──
 restore_from_backup() {
     echo -e "\033[33mRestoring from backup...\033[0m"
     local latest=$(ls -dt "$BACKUP_DIR"/config-* 2>/dev/null | head -1)
@@ -116,7 +119,7 @@ restore_from_backup() {
     fi
 }
 
-# ── Cleanup (TUN interfaces, routes) ──
+# ── Cleanup (TUN interfaces, routes) / 清理网络（TUN 接口、路由）──
 cleanup_network() {
     echo -e "\033[33mCleaning up network interfaces...\033[0m"
     case "$OS" in
@@ -134,7 +137,7 @@ cleanup_network() {
     esac
 }
 
-# ── Main ──
+# ── Main / 主入口 ──
 case "$ACTION" in
     uninstall)
         echo "Full uninstall — all data will be removed."

@@ -20,11 +20,14 @@ import kotlin.concurrent.thread
 
 /**
  * ConnectAlso VpnService for Android.
+ * Android 平台的 ConnectAlso VPN 服务。
  *
  * Creates a TUN interface via VpnService.Builder and forwards packets
  * through the Rust engine (libconnectalso_mobile.so via JNI).
+ * 通过 VpnService.Builder 创建 TUN 虚拟网卡，并通过 Rust 引擎
+ * （libconnectalso_mobile.so，JNI 调用）转发数据包。
  *
- * ## Setup in AndroidManifest.xml
+ * ## Setup in AndroidManifest.xml / AndroidManifest.xml 配置
  *
  * ```xml
  * <service
@@ -37,7 +40,7 @@ import kotlin.concurrent.thread
  * </service>
  * ```
  *
- * ## Required permissions
+ * ## Required permissions / 所需权限
  *
  * ```xml
  * <uses-permission android:name="android.permission.INTERNET" />
@@ -90,9 +93,21 @@ class ConnectAlsoVpnService : VpnService() {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // VPN Control
+    // VPN Control / VPN 控制
     // ═══════════════════════════════════════════════════════════════
 
+    /**
+     * Start the VPN tunnel.
+     * 启动 VPN 隧道。
+     *
+     * Initializes the Rust engine, creates a TUN interface, acquires a
+     * wakelock, and starts bidirectional packet forwarding threads.
+     * 初始化 Rust 引擎，创建 TUN 虚拟网卡，获取唤醒锁，并启动双向数据包转发线程。
+     *
+     * @param controlUrl  Control service URL / 控制服务地址
+     * @param relayServer Relay server address / 中继服务器地址
+     * @param hostname    Device hostname / 设备主机名
+     */
     private fun startVpn(controlUrl: String, relayServer: String, hostname: String) {
         if (running) {
             Log.w(TAG, "VPN already running")
@@ -144,6 +159,14 @@ class ConnectAlsoVpnService : VpnService() {
         Log.i(TAG, "VPN started ($virtualIp)")
     }
 
+    /**
+     * Stop the VPN tunnel.
+     * 停止 VPN 隧道。
+     *
+     * Unregisters network callbacks, releases the wakelock, shuts down
+     * the Rust engine, and closes the TUN file descriptor.
+     * 注销网络回调，释放唤醒锁，关闭 Rust 引擎，并关闭 TUN 文件描述符。
+     */
     private fun stopVpn() {
         running = false
 
@@ -170,9 +193,19 @@ class ConnectAlsoVpnService : VpnService() {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Packet Forwarding
+    // Packet Forwarding / 数据包转发
     // ═══════════════════════════════════════════════════════════════
 
+    /**
+     * Start bidirectional packet forwarding between TUN and Rust engine.
+     * 启动 TUN 与 Rust 引擎之间的双向数据包转发。
+     *
+     * Spawns two threads: one reading from TUN and forwarding to the Rust
+     * engine (outbound), and one polling the Rust engine and writing to TUN
+     * (inbound).
+     * 启动两个线程：一个从 TUN 读取并转发到 Rust 引擎（出站），
+     * 另一个从 Rust 引擎轮询并写入 TUN（入站）。
+     */
     private fun startPacketForwarding() {
         val fd = tunFd ?: return
         val input = FileInputStream(fd.fileDescriptor)
@@ -214,7 +247,7 @@ class ConnectAlsoVpnService : VpnService() {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Notification
+    // Notification / 通知
     // ═══════════════════════════════════════════════════════════════
 
     private fun createNotificationChannel() {
@@ -253,9 +286,19 @@ class ConnectAlsoVpnService : VpnService() {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Network change detection (Wi-Fi ↔ Cellular)
+    // Network change detection (Wi-Fi ↔ Cellular) / 网络变化检测（Wi-Fi ↔ 蜂窝网络）
     // ═══════════════════════════════════════════════════════════════
 
+    /**
+     * Register a network callback to detect connectivity changes.
+     * 注册网络回调以检测网络连接变化。
+     *
+     * Monitors network availability, loss, and capability changes
+     * (e.g., switching between Wi-Fi and cellular) to trigger VPN
+     * reconnection.
+     * 监控网络可用性、丢失和能力变化（如 Wi-Fi 与蜂窝网络切换），
+     * 以触发 VPN 重连。
+     */
     private fun registerNetworkCallback() {
         connectivityManager = getSystemService(ConnectivityManager::class.java)
         networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -304,9 +347,13 @@ class ConnectAlsoVpnService : VpnService() {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Battery optimization
+    // Battery optimization / 电池优化
     // ═══════════════════════════════════════════════════════════════
 
+    /**
+     * Acquire a partial wakelock to keep the CPU awake for packet forwarding.
+     * 获取部分唤醒锁以保持 CPU 唤醒，确保数据包转发不中断。
+     */
     private fun acquireWakelock() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakelock = pm.newWakeLock(

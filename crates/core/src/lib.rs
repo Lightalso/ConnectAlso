@@ -1,62 +1,90 @@
-//! `ConnectAlso` common types, configuration and protocol definitions.
+//! # ConnectAlso Core Types
+//!
+//! `ConnectAlso` 公共类型、配置与协议定义。
+//! Common types, configuration, and protocol definitions.
 //!
 //! This crate provides shared types used across all other `ConnectAlso` crates,
 //! including ACL rule evaluation and packet parsing utilities.
+//!
+//! 本 crate 提供所有 `ConnectAlso` crate 共享的类型，包括 ACL 规则评估和包解析工具。
 
 use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
 
+/// DNS 记录，用于 Magic DNS 域名解析。
 /// A DNS record for Magic DNS name resolution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnsRecord {
-    /// Hostname (without domain suffix)
+    /// 主机名（不含域名后缀）。
+    /// Hostname (without domain suffix).
     pub hostname: String,
-    /// Virtual IPv4 address
+    /// 虚拟 IPv4 地址。
+    /// Virtual IPv4 address.
     pub ipv4: Ipv4Addr,
 }
 
+/// ACL 规则，用于包过滤。
 /// An ACL rule for packet filtering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AclRule {
+    /// 规则优先级（值越小优先级越高）。
     /// Rule priority (lower = higher priority).
     pub priority: u32,
+    /// 动作："allow" 或 "deny"。
     /// Action: "allow" or "deny".
     pub action: String,
+    /// 源虚拟 IP（可选，空字符串表示任意）。
     /// Source virtual IP (optional, empty = any).
     #[serde(default)]
     pub src_ip: String,
+    /// 目标虚拟 IP（可选，空字符串表示任意）。
     /// Destination virtual IP (optional, empty = any).
     #[serde(default)]
     pub dst_ip: String,
+    /// 协议："tcp"、"udp"、"icmp"，或空字符串表示任意。
     /// Protocol: "tcp", "udp", "icmp", or "" for any.
     #[serde(default)]
     pub protocol: String,
+    /// 源端口（0 表示任意）。
     /// Source port (0 = any).
     #[serde(default)]
     pub src_port: u16,
+    /// 目标端口（0 表示任意）。
     /// Destination port (0 = any).
     #[serde(default)]
     pub dst_port: u16,
 }
 
+/// 解析后的 IP 包头信息，用于 ACL 匹配。
 /// An IP packet header parsed for ACL matching.
 #[derive(Debug)]
 pub struct PacketInfo {
+    /// 源 IPv4 地址。
     /// Source IPv4 address.
     pub src_ip: Ipv4Addr,
+    /// 目标 IPv4 地址。
     /// Destination IPv4 address.
     pub dst_ip: Ipv4Addr,
+    /// IP 协议号（6=TCP, 17=UDP, 1=ICMP）。
     /// IP protocol number (6=TCP, 17=UDP, 1=ICMP).
     pub protocol: u8,
+    /// 源端口（仅 TCP/UDP）。
     /// Source port (TCP/UDP only).
     pub src_port: u16,
+    /// 目标端口（仅 TCP/UDP）。
     /// Destination port (TCP/UDP only).
     pub dst_port: u16,
 }
 
 impl PacketInfo {
+    /// 解析 IP 包，提取 ACL 相关字段。
     /// Parse an IP packet to extract ACL-relevant fields.
+    ///
+    /// # Returns
+    ///
+    /// 返回 `Some(PacketInfo)` 如果包是合法的 IPv4 包，否则返回 `None`。
+    /// Returns `Some(PacketInfo)` if the packet is a valid IPv4 packet, otherwise `None`.
     #[must_use]
     pub fn parse(packet: &[u8]) -> Option<Self> {
         if packet.len() < 20 || packet[0] >> 4 != 4 {
@@ -85,7 +113,13 @@ impl PacketInfo {
 }
 
 impl AclRule {
+    /// 检查此规则是否匹配给定的包。
     /// Check if this rule matches a packet.
+    ///
+    /// # Returns
+    ///
+    /// 如果规则匹配包则返回 `true`。
+    /// Returns `true` if the rule matches the packet.
     #[must_use]
     pub fn matches(&self, pkt: &PacketInfo) -> bool {
         if !self.src_ip.is_empty() {
@@ -123,8 +157,26 @@ impl AclRule {
     }
 }
 
+/// 评估一组 ACL 规则是否适用于一个包。
 /// Evaluate a list of ACL rules against a packet.
-/// Returns the action of the first matching rule, or "allow" if no rules match.
+///
+/// 按优先级顺序评估规则，返回第一个匹配规则的动作；
+/// 如果没有规则匹配则默认返回 "allow"。
+/// Rules are evaluated in priority order. Returns the action of the
+/// first matching rule, or "allow" if no rules match.
+///
+/// # Arguments
+///
+/// * `rules` - 按优先级排序的 ACL 规则切片。
+/// * `packet` - 原始 IP 包字节。
+///
+/// * `rules` - Slice of ACL rules sorted by priority.
+/// * `packet` - Raw IP packet bytes.
+///
+/// # Returns
+///
+/// 返回 `"allow"` 或 `"deny"`。
+/// Returns `"allow"` or `"deny"`.
 #[must_use]
 pub fn evaluate_acls(rules: &[AclRule], packet: &[u8]) -> &'static str {
     let Some(pkt_info) = PacketInfo::parse(packet) else {

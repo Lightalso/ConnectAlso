@@ -1,3 +1,4 @@
+//! ConnectAlso CLI — 用于管理守护进程的命令行界面。
 //! ConnectAlso CLI — command-line interface for managing the daemon.
 
 use std::net::SocketAddr;
@@ -8,6 +9,8 @@ use serde::Deserialize;
 #[derive(Parser)]
 #[command(name = "connectalso")]
 #[command(about = "ConnectAlso — 简单、安全的跨平台异地组网工具")]
+/// ConnectAlso 命令行参数结构体。
+/// Command-line argument structure for ConnectAlso.
 struct Cli {
     #[arg(long, default_value = "http://127.0.0.1:9823", global = true)]
     daemon_url: String,
@@ -16,13 +19,21 @@ struct Cli {
     command: Commands,
 }
 
+/// 命令行子命令枚举。
+/// Subcommands for the ConnectAlso CLI.
 #[derive(Subcommand)]
 enum Commands {
+    /// 查看守护进程状态。
+    /// Show daemon status.
     Status {
         #[arg(short, long)]
         verbose: bool,
     },
+    /// 运行网络诊断。
+    /// Run network diagnostics.
     Diag,
+    /// 启动守护进程。
+    /// Start the daemon.
     Start {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
@@ -33,18 +44,23 @@ enum Commands {
         #[arg(short, long, default_value = "unnamed")]
         hostname: String,
     },
+    /// 停止守护进程。
+    /// Stop the daemon.
     Stop,
-    /// 管理员命令
+    /// 管理员命令。
+    /// Administrator commands.
     Admin {
         #[command(subcommand)]
         action: AdminCmd,
     },
-    /// 备份控制服务数据库
+    /// 备份控制服务数据库。
+    /// Backup the control service database.
     Backup {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
     },
-    /// 从备份恢复控制服务数据库
+    /// 从备份恢复控制服务数据库。
+    /// Restore the control service database from backup.
     Restore {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
@@ -52,25 +68,31 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+/// 管理员操作子命令。
+/// Administrator action subcommands.
 enum AdminCmd {
-    /// 列出待审批设备
+    /// 列出待审批设备。
+    /// List pending devices awaiting approval.
     Pending {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
     },
-    /// 审批设备
+    /// 审批设备。
+    /// Approve a device.
     Approve {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
         device_id: String,
     },
-    /// 撤销设备
+    /// 撤销设备。
+    /// Revoke a device.
     Revoke {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
         device_id: String,
     },
-    /// 列出所有设备（含状态）
+    /// 列出所有设备（含状态）。
+    /// List all devices with their status.
     Peers {
         #[arg(long, default_value = "http://127.0.0.1:3000")]
         control_url: String,
@@ -78,49 +100,114 @@ enum AdminCmd {
 }
 
 #[derive(Debug, Deserialize)]
+/// 守护进程状态响应。
+/// Daemon status response.
 struct StatusResponse {
+    /// 设备唯一标识符。
+    /// Unique device identifier.
     device_id: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     virtual_ip: String,
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 运行时长（秒）。
+    /// Uptime in seconds.
     uptime_secs: u64,
+    /// 已连接的对等节点数量。
+    /// Number of connected peers.
     peer_count: usize,
+    /// 对等节点列表。
+    /// List of connected peers.
     peers: Vec<StatusPeer>,
 }
 
 #[derive(Debug, Deserialize)]
+/// 对等节点状态信息。
+/// Status information for a connected peer.
 struct StatusPeer {
+    /// 对等节点设备 ID。
+    /// Peer device identifier.
     device_id: String,
+    /// 对等节点虚拟 IP。
+    /// Peer virtual IP address.
     virtual_ip: String,
+    /// 对等节点主机名。
+    /// Peer hostname.
     hostname: String,
+    /// 连接路径类型（direct / relay / probing）。
+    /// Connection path type (direct / relay / probing).
     #[serde(default)]
     path: String,
 }
 
 #[derive(Debug, Deserialize)]
+/// 诊断检查响应。
+/// Diagnostics check response.
 struct DiagnosticsResponse {
+    /// 守护进程自身检查。
+    /// Daemon self-check result.
     daemon: CheckResult,
+    /// 控制服务检查。
+    /// Control service check result.
     control: CheckResult,
+    /// STUN 服务检查。
+    /// STUN service check result.
     stun: CheckResult,
+    /// 中继服务检查。
+    /// Relay service check result.
     relay: CheckResult,
+    /// TUN 虚拟网卡检查。
+    /// TUN virtual interface check result.
     tun: CheckResult,
+    /// 各对等节点的诊断结果。
+    /// Per-peer diagnostic results.
     peers: Vec<PeerDiag>,
 }
 
+/// 单项检查结果。
+/// Result of a single diagnostic check.
 #[derive(Debug, Deserialize)]
 struct CheckResult {
+    /// 状态："ok" / "warn" / "error"。
+    /// Status: "ok" / "warn" / "error".
     status: String,
+    /// 详细信息。
+    /// Detailed description.
     detail: String,
+    /// 延迟（毫秒）。
+    /// Latency in milliseconds.
     latency_ms: Option<u64>,
 }
 
+/// 对等节点诊断信息。
+/// Diagnostic information for a peer.
 #[derive(Debug, Deserialize)]
 struct PeerDiag {
+    /// 主机名。
+    /// Hostname.
     hostname: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     virtual_ip: String,
+    /// 连接路径类型。
+    /// Connection path type.
     path: String,
+    /// 是否可达。
+    /// Whether the peer is reachable.
     reachable: bool,
 }
 
+/// 将秒数格式化为可读的时长字符串。
+/// Format seconds into a human-readable duration string.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(fmt_duration(65), "1m 5s");
+/// assert_eq!(fmt_duration(3661), "1h 1m 1s");
+/// ```
 fn fmt_duration(secs: u64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
@@ -134,6 +221,17 @@ fn fmt_duration(secs: u64) -> String {
     }
 }
 
+/// 将状态字符串映射为对应的图标字符。
+/// Map a status string to its corresponding icon character.
+///
+/// # Mapping
+///
+/// | Status | Icon |
+/// |--------|------|
+/// | ok     | ✓    |
+/// | warn   | ⚠    |
+/// | error  | ✗    |
+/// | other  | ?    |
 fn status_icon(status: &str) -> &str {
     match status {
         "ok" => "✓",
@@ -165,6 +263,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 处理 `status` 子命令：获取并显示守护进程状态。
+/// Handle the `status` subcommand: fetch and display daemon status.
 async fn cmd_status(daemon_url: &str, verbose: bool) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp = http.get(format!("{daemon_url}/status")).send().await;
@@ -213,6 +313,8 @@ async fn cmd_status(daemon_url: &str, verbose: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 处理 `diag` 子命令：运行网络诊断检查。
+/// Handle the `diag` subcommand: run network diagnostic checks.
 async fn cmd_diag(daemon_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp = http.get(format!("{daemon_url}/diagnostics")).send().await;
@@ -256,6 +358,11 @@ async fn cmd_diag(daemon_url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 处理 `start` 子命令：启动守护进程。
+/// Handle the `start` subcommand: launch the daemon process.
+///
+/// 检查守护进程是否已在运行，若未运行则启动 `connectalso-daemon` 子进程。
+/// Checks if a daemon is already running, and if not, spawns `connectalso-daemon`.
 async fn cmd_start(
     control_url: &str,
     stun_server: SocketAddr,
@@ -297,6 +404,8 @@ async fn cmd_start(
     Ok(())
 }
 
+/// 处理 `stop` 子命令：请求守护进程关闭。
+/// Handle the `stop` subcommand: request daemon shutdown.
 async fn cmd_stop(daemon_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     match http.post(format!("{daemon_url}/shutdown")).send().await {
@@ -308,6 +417,8 @@ async fn cmd_stop(daemon_url: &str) -> anyhow::Result<()> {
 
 // ── Admin commands ──
 
+/// 列出待审批的设备列表。
+/// List devices pending approval.
 async fn cmd_admin_pending(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp = http.get(format!("{control_url}/api/v1/register/pending")).send().await?;
@@ -331,6 +442,8 @@ async fn cmd_admin_pending(control_url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 审批指定设备。
+/// Approve a specific device.
 async fn cmd_admin_approve(control_url: &str, device_id: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp: serde_json::Value =
@@ -343,6 +456,8 @@ async fn cmd_admin_approve(control_url: &str, device_id: &str) -> anyhow::Result
     Ok(())
 }
 
+/// 撤销指定设备的访问权限。
+/// Revoke access for a specific device.
 async fn cmd_admin_revoke(control_url: &str, device_id: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp: serde_json::Value =
@@ -355,6 +470,8 @@ async fn cmd_admin_revoke(control_url: &str, device_id: &str) -> anyhow::Result<
     Ok(())
 }
 
+/// 列出所有已注册设备及其状态。
+/// List all registered devices and their status.
 async fn cmd_admin_peers(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp: serde_json::Value = http.get(format!("{control_url}/api/v1/admin/peers")).send().await?.json().await?;
@@ -374,6 +491,8 @@ async fn cmd_admin_peers(control_url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 处理 `backup` 子命令：创建控制服务数据库备份。
+/// Handle the `backup` subcommand: create a database backup.
 async fn cmd_backup(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp: serde_json::Value = http.post(format!("{control_url}/api/v1/backup")).send().await?.json().await?;
@@ -385,6 +504,8 @@ async fn cmd_backup(control_url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 处理 `restore` 子命令：从备份恢复控制服务数据库。
+/// Handle the `restore` subcommand: restore the database from backup.
 async fn cmd_restore(control_url: &str) -> anyhow::Result<()> {
     println!("Warning: this will overwrite the current database.");
     println!("Continue? [y/N]");

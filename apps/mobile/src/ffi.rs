@@ -11,6 +11,7 @@ fn runtime() -> &'static Runtime {
     RUNTIME.get_or_init(|| Runtime::new().expect("tokio runtime"))
 }
 
+/// 辅助函数：将 C 字符串转换为 Rust `&str`。
 /// Helper: convert C string to Rust &str.
 unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> &'a str {
     if ptr.is_null() {
@@ -23,6 +24,16 @@ unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> &'a str {
 // FFI Exports
 // ═══════════════════════════════════════════════════════════════════
 
+/// 初始化 ConnectAlso 移动端引擎。
+///
+/// 参数均为以 null 结尾的 C 字符串：
+/// - control_url: 例如 "http://192.168.1.1:3000"
+/// - stun_server: iOS 忽略（使用 relay）
+/// - relay_server: 例如 "192.168.1.1:33478"
+/// - hostname: 设备名称
+///
+/// 成功返回 0，失败返回 -1。
+///
 /// Initialize the ConnectAlso mobile engine.
 ///
 /// Parameters are null-terminated C strings:
@@ -63,6 +74,13 @@ pub extern "C" fn connectalso_init(
     }
 }
 
+/// 处理来自 TUN 接口的出站 IP 数据包。
+///
+/// 从 `packet` 读取 `packet_len` 字节，加密后经中继转发至对应节点。
+/// 将结果数据写入 `out_buf`（最多 `out_buf_len` 字节），返回写入的字节数。
+/// 返回 0 表示数据包已转发（无本地投递）。
+/// 返回 -1 表示错误。
+///
 /// Process an outgoing IP packet from the TUN interface.
 ///
 /// Reads `packet_len` bytes from `packet`, encrypts and forwards to
@@ -97,6 +115,12 @@ pub extern "C" fn connectalso_send_packet(
     }
 }
 
+/// 从隧道网络轮询一个入站数据包。
+///
+/// 将最多 `out_buf_len` 字节写入 `out_buf`，返回写入的字节数。
+/// 返回 0 表示无数据。
+/// 返回 -1 表示错误。
+///
 /// Poll for an incoming packet from the tunnel network.
 ///
 /// Writes up to `out_buf_len` bytes to `out_buf` and returns the
@@ -120,12 +144,20 @@ pub extern "C" fn connectalso_recv_packet(out_buf: *mut u8, out_buf_len: u32) ->
     }
 }
 
+/// 关闭引擎并释放资源。
 /// Shut down the engine and release resources.
 #[no_mangle]
 pub extern "C" fn connectalso_shutdown() {
     tracing::info!("iOS engine shutting down");
 }
 
+/// 网络切换后触发重连（Wi-Fi ↔ 蜂窝网络）。
+///
+/// 重新向控制服务注册、刷新节点列表、重连中继会话并
+/// 冲刷缓存的外发包队列。
+///
+/// 成功返回 0，失败返回 -1。
+///
 /// Trigger reconnection after a network change (Wi-Fi ↔ Cellular).
 ///
 /// This re-registers with the control service, refreshes the peer list,
@@ -143,6 +175,10 @@ pub extern "C" fn connectalso_reconnect() -> i32 {
     }
 }
 
+/// 使用自适应超时轮询数据（用于电池优化）。
+///
+/// 返回写入的字节数，超时返回 0，错误返回 -1。
+///
 /// Poll for data with adaptive timeout for battery optimization.
 ///
 /// Returns bytes written, 0 if timeout, -1 on error.
@@ -166,6 +202,11 @@ pub extern "C" fn connectalso_recv_packet_timeout(out_buf: *mut u8, out_buf_len:
     }
 }
 
+/// 返回分配给本设备的虚拟 IP 地址。
+///
+/// 将一个以 null 结尾的字符串写入 `out_buf`（最多 `out_len` 字节）。
+/// 成功返回字符串长度（不含 null），失败返回 -1。
+///
 /// Return the virtual IP assigned to this device.
 ///
 /// Writes a null-terminated string to `out_buf` (max `out_len` bytes).

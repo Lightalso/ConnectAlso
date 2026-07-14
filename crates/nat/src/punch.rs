@@ -8,12 +8,14 @@ use crate::candidate::Candidate;
 const PUNCH_RETRIES: usize = 10;
 const PUNCH_INTERVAL_MS: u64 = 50;
 
+/// 单个对等方的 UDP 打洞状态。
 /// UDP hole-punching state for a single peer.
 pub struct Puncher {
     socket: UdpSocket,
 }
 
 impl Puncher {
+    /// 创建一个新的打洞器，绑定到指定的本地 UDP 端口。
     /// Create a new puncher bound to a local UDP port.
     pub async fn bind(addr: SocketAddr) -> Result<Self, std::io::Error> {
         let socket = UdpSocket::bind(addr).await?;
@@ -21,17 +23,27 @@ impl Puncher {
         Ok(Self { socket })
     }
 
+    /// 从已绑定的 UDP 套接字创建打洞器。
     /// Create a puncher from an already-bound UDP socket.
     #[must_use]
     pub fn from_socket(socket: UdpSocket) -> Self {
         Self { socket }
     }
 
+    /// 返回已绑定套接字的本地地址。
     /// Return the local address of the bound socket.
     pub fn local_addr(&self) -> Result<SocketAddr, std::io::Error> {
         self.socket.local_addr()
     }
 
+    /// 向对等方的候选地址列表执行 UDP 打洞。
+    ///
+    /// 此方法会向每个候选地址重复发送“打洞”数据包，
+    /// 同时监听响应。若成功建立双向通信则返回 `true`。
+    ///
+    /// `our_token` 在打洞载荷中发送，供对等方识别我方；
+    /// 函数返回收到的第一个载荷数据。
+    ///
     /// Perform UDP hole punching towards a list of peer candidates.
     ///
     /// This sends repeated "punch" packets to each candidate while
@@ -40,6 +52,16 @@ impl Puncher {
     ///
     /// `our_token` is sent in the punch payload so the peer can
     /// identify us; the function returns the first received payload.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some((payload, addr)))` — 收到对等方响应，附载荷和来源地址
+    /// - `Ok(None)` — 所有重试轮次后仍未收到响应
+    /// - `Err(...)` — I/O 错误
+    ///
+    /// - `Ok(Some((payload, addr)))` — received response with payload and source address
+    /// - `Ok(None)` — no response received after all retries
+    /// - `Err(...)` — I/O error
     #[instrument(skip(self), fields(local = %self.socket.local_addr().unwrap()))]
     pub async fn punch(
         &self,
@@ -83,16 +105,19 @@ impl Puncher {
         Ok(None)
     }
 
+    /// 向对等方地址发送消息。在打洞成功后使用。
     /// Send a message to a peer address. Used after punching succeeds.
     pub async fn send_to(&self, data: &[u8], peer: SocketAddr) -> Result<usize, std::io::Error> {
         self.socket.send_to(data, peer).await
     }
 
+    /// 从任一对等方接收消息。
     /// Receive a message from any peer.
     pub async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), std::io::Error> {
         self.socket.recv_from(buf).await
     }
 
+    /// 等待来自对等方的打洞数据包。供响应方使用。
     /// Wait for a punch packet from a peer. Used by the responder side.
     pub async fn wait_for_punch(&self) -> Result<(Vec<u8>, SocketAddr), std::io::Error> {
         let mut buf = [0u8; 1024];

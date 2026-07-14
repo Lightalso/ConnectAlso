@@ -3,8 +3,10 @@ use std::net::Ipv4Addr;
 
 use tokio::net::UdpSocket;
 
+/// 一个微型 DNS 服务器，将 ConnectAlso 主机名解析为虚拟 IP 地址。
 /// A minimal DNS server that resolves ConnectAlso hostnames to virtual IPs.
 ///
+/// 监听本地 UDP 端口，响应 `<name>.connectalso` 或裸 `<name>` 的 A 记录查询。
 /// Listens on a local UDP port and responds to A-record queries for
 /// hostnames matching `<name>.connectalso` or bare `<name>`.
 #[allow(dead_code)]
@@ -16,13 +18,20 @@ pub struct DnsServer {
 
 #[allow(dead_code)]
 impl DnsServer {
+    /// 创建并绑定一个新的 DNS 服务器。
     /// Create a new DNS server bound to `listen_addr`.
+    ///
+    /// # Errors
+    ///
+    /// 如果无法绑定到指定地址则返回 I/O 错误。
+    /// Returns an I/O error if the address cannot be bound.
     pub async fn bind(listen_addr: &str, upstream: &str) -> Result<Self, std::io::Error> {
         let socket = UdpSocket::bind(listen_addr).await?;
         tracing::info!(%listen_addr, %upstream, "DNS server started");
         Ok(Self { socket, records: HashMap::new(), upstream: upstream.to_string() })
     }
 
+    /// 根据当前对等节点列表更新 DNS 记录。
     /// Update the DNS records from the current peer list.
     pub fn update_records(&mut self, hosts: &[(String, Ipv4Addr)]) {
         self.records.clear();
@@ -31,6 +40,7 @@ impl DnsServer {
         }
     }
 
+    /// 运行 DNS 服务器循环，永不返回。
     /// Run the DNS server loop. Never returns.
     pub async fn serve(self) {
         let mut buf = [0u8; 512];
@@ -47,6 +57,13 @@ impl DnsServer {
         }
     }
 
+    /// 解析 DNS 查询并构建 A 记录响应。
+    /// Parse a DNS query and build an A-record response.
+    ///
+    /// # Returns
+    ///
+    /// 如果查询名称匹配已知主机则返回 DNS 响应包，否则返回 `None`。
+    /// Returns the DNS response packet if the queried name matches a known host, otherwise `None`.
     fn handle_query(&self, query: &[u8]) -> Option<Vec<u8>> {
         if query.len() < 12 {
             return None;

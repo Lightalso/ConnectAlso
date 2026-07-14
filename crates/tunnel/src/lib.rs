@@ -1,3 +1,8 @@
+//! 加密UDP隧道、路径管理和中继客户端。
+//!
+//! 提供ChaCha20-Poly1305加密隧道、P2P直连与中继之间的路径切换，
+//! 以及多区域中继池管理。
+//!
 //! Encrypted UDP tunnel, path management, and relay client.
 //!
 //! Provides ChaCha20-Poly1305 encrypted tunnels, path switching between
@@ -9,30 +14,50 @@ use connectalso_crypto::key_exchange::{CryptoError, SessionCipher};
 use thiserror::Error;
 use tokio::net::UdpSocket;
 
+/// 响应者发送方向的Nonce起始偏移量，
+/// 防止双方共享同一加密密钥时的Nonce重复。
 /// Nonce starting offset for the responder's send direction,
 /// preventing nonce reuse when both peers share the same encryption key.
 const RESPONDER_TX_OFFSET: u64 = 1u64 << 32;
 
 const MAX_PACKET: usize = 65536;
 
+/// 路径管理，支持P2P直连+中继回退。
 /// Path management with P2P direct + relay fallback.
 pub mod path;
+/// 中继客户端，用于通过中继服务器发送加密数据。
 /// Relay client for sending encrypted data through relay servers.
 pub mod relay;
+/// 多区域中继池，支持自动故障转移。
 /// Multi-region relay pool with automatic failover.
 pub mod relay_pool;
 
+/// 隧道操作错误。
 /// Tunnel operation errors.
 #[derive(Debug, Error)]
 pub enum TunnelError {
+    /// 底层UDP套接字上的I/O错误。
     /// I/O error on the underlying UDP socket.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// 加密操作失败。
     /// Cryptographic operation failed.
     #[error("crypto error: {0}")]
     Crypto(#[from] CryptoError),
 }
 
+/// 两个节点之间的加密UDP隧道。
+///
+/// 每个方向使用独立的Nonce空间以防Nonce重复。
+/// 数据包使用ChaCha20-Poly1305 (AEAD)加密，
+/// 密钥由X25519 Diffie-Hellman共享密钥派生。
+///
+/// # Fields
+///
+/// * `socket` — 底层UDP套接字。
+/// * `tx_cipher` — 发送方向会话密码。
+/// * `rx_cipher` — 接收方向会话密码。
+///
 /// An encrypted UDP tunnel between two nodes.
 ///
 /// Each direction uses its own nonce space to prevent nonce reuse.
@@ -45,12 +70,32 @@ pub struct Tunnel {
 }
 
 impl Tunnel {
+    /// 绑定到本地UDP地址并初始化为**发起者**模式的隧道（发送Nonce从0开始）。
+    ///
+    /// # Errors
+    ///
+    /// * 如果绑定UDP套接字或创建会话密码失败，返回`TunnelError`。
+    ///
+    /// # Returns
+    ///
+    /// * 返回初始化好的`Tunnel`实例。
+    ///
     /// Bind to a local UDP address and initialise the tunnel as the
     /// **initiator** (send nonces start at 0).
     pub async fn bind_initiator(local_addr: SocketAddr, shared_secret: &[u8; 32]) -> Result<Self, TunnelError> {
         Self::bind_with_nonce(local_addr, shared_secret, 0).await
     }
 
+    /// 绑定到本地UDP地址并初始化为**响应者**模式的隧道（发送Nonce从`RESPONDER_TX_OFFSET`开始）。
+    ///
+    /// # Errors
+    ///
+    /// * 如果绑定UDP套接字或创建会话密码失败，返回`TunnelError`。
+    ///
+    /// # Returns
+    ///
+    /// * 返回初始化好的`Tunnel`实例。
+    ///
     /// Bind to a local UDP address and initialise the tunnel as the
     /// **responder** (send nonces start at `RESPONDER_TX_OFFSET`).
     pub async fn bind_responder(local_addr: SocketAddr, shared_secret: &[u8; 32]) -> Result<Self, TunnelError> {
@@ -71,11 +116,27 @@ impl Tunnel {
         Ok(Self { socket, tx_cipher, rx_cipher })
     }
 
+    /// 返回本地套接字地址。
+    ///
+    /// # Returns
+    ///
+    /// * 本地`SocketAddr`，如果是I/O错误则返回错误。
+    ///
     /// Return the local socket address.
     pub fn local_addr(&self) -> Result<SocketAddr, std::io::Error> {
         self.socket.local_addr()
     }
 
+    /// 加密`plaintext`并发送给`peer`。
+    ///
+    /// # Errors
+    ///
+    /// * 加密失败或UDP发送失败时返回`TunnelError`。
+    ///
+    /// # Returns
+    ///
+    /// * 返回发送的明文字节数。
+    ///
     /// Encrypt `plaintext` and send it to `peer`.
     ///
     /// Returns the number of plaintext bytes sent.
@@ -91,6 +152,16 @@ impl Tunnel {
         Ok(plaintext.len())
     }
 
+    /// 接收加密数据包，解密后返回明文及发送者地址。
+    ///
+    /// # Errors
+    ///
+    /// * 接收失败或解密失败时返回`TunnelError`。
+    ///
+    /// # Returns
+    ///
+    /// * 返回明文数据和发送者`SocketAddr`。
+    ///
     /// Receive an encrypted packet, decrypt it, and return the plaintext
     /// together with the sender's address.
     pub async fn recv_from(&self) -> Result<(Vec<u8>, SocketAddr), TunnelError> {
@@ -108,6 +179,12 @@ impl Tunnel {
         Ok((plaintext, peer))
     }
 
+    /// 消耗隧道并返回底层UDP套接字。
+    ///
+    /// # Returns
+    ///
+    /// * 底层`UdpSocket`。
+    ///
     /// Consume the tunnel and return the underlying socket.
     #[must_use]
     pub fn into_socket(self) -> UdpSocket {

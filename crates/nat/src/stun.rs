@@ -11,26 +11,35 @@ const ATTR_XOR_MAPPED_ADDRESS: u16 = 0x0020;
 const HEADER_LEN: usize = 20;
 const IPV4_FAMILY: u8 = 0x01;
 
+/// STUN 操作错误。
 /// STUN operation errors.
 #[derive(Debug, Error)]
 pub enum StunError {
+    /// 与 STUN 服务器通信时发生 I/O 错误。
     /// I/O error communicating with the STUN server.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    /// STUN 服务器返回了非预期的响应类型。
     /// The STUN server returned an unexpected response type.
     #[error("unexpected STUN response type: {0:#06x}")]
     UnexpectedResponse(u16),
+    /// 响应中的事务 ID 与请求不匹配。
     /// The response transaction ID does not match the request.
     #[error("transaction ID mismatch")]
     TransactionMismatch,
+    /// 无法解析 XOR-MAPPED-ADDRESS 属性。
     /// Failed to parse the XOR-MAPPED-ADDRESS attribute.
     #[error("no XOR-MAPPED-ADDRESS in response")]
     MissingMappedAddress,
+    /// 无法解析服务器地址。
     /// The server address could not be parsed.
     #[error("invalid server address")]
     InvalidServerAddress,
 }
 
+/// 最小化的 STUN 客户端，通过向 STUN 服务器发送 Binding Request
+/// 来发现公网（服务器反射）地址。
+///
 /// A minimal STUN client that discovers the public (server-reflexive)
 /// address by sending a Binding Request to a STUN server.
 pub struct StunClient {
@@ -38,31 +47,47 @@ pub struct StunClient {
 }
 
 impl StunClient {
+    /// 创建一个新的 STUN 客户端，绑定到临时的本地端口。
     /// Create a new STUN client bound to an ephemeral local port.
     pub async fn bind() -> Result<Self, StunError> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         Ok(Self { socket })
     }
 
+    /// 使用已绑定的 UDP 套接字创建 STUN 客户端。
     /// Create a STUN client using an already-bound UDP socket.
     #[must_use]
     pub fn from_socket(socket: UdpSocket) -> Self {
         Self { socket }
     }
 
+    /// 返回底层套接字的本地地址。
     /// Return the local address of the underlying socket.
     pub fn local_addr(&self) -> Result<SocketAddr, std::io::Error> {
         self.socket.local_addr()
     }
 
+    /// 消费客户端并返回底层 UDP 套接字。
     /// Consume the client and return the underlying UDP socket.
     #[must_use]
     pub fn into_socket(self) -> UdpSocket {
         self.socket
     }
 
+    /// 向 `server` 发送 Binding Request，并从响应中返回
+    /// XOR-MAPPED-ADDRESS — 即服务器看到的公网 IP:端口。
+    ///
+    /// # Errors
+    ///
+    /// 网络 I/O 错误、非预期的响应类型、事务 ID 不匹配或缺少映射地址时返回 `StunError`。
+    ///
     /// Send a Binding Request to `server` and return the XOR-MAPPED-ADDRESS
     /// from the response — i.e. the public IP:port as seen by the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StunError` on network I/O error, unexpected response type,
+    /// transaction ID mismatch, or missing mapped address.
     pub async fn discover(&self, server: SocketAddr) -> Result<SocketAddr, StunError> {
         let tx_id: [u8; 12] = rand::thread_rng().gen();
 
@@ -85,6 +110,14 @@ impl StunClient {
     }
 }
 
+/// 构建一个 STUN Binding Request 消息体。
+/// Build a STUN Binding Request message body.
+///
+/// # Parameters
+/// - `tx_id`: 12 字节事务 ID / 12-byte transaction ID
+///
+/// # Returns
+/// 包含完整 STUN 头的 `Vec<u8>` / `Vec<u8>` with the full STUN header
 fn build_binding_request(tx_id: &[u8; 12]) -> Vec<u8> {
     let mut buf = Vec::with_capacity(HEADER_LEN);
     // Message Type (2 bytes)
@@ -98,6 +131,14 @@ fn build_binding_request(tx_id: &[u8; 12]) -> Vec<u8> {
     buf
 }
 
+/// 解析 STUN 响应头部，提取消息类型、事务 ID 和属性字节。
+/// Parse a STUN response header, extracting the message type,
+/// transaction ID and attribute bytes.
+///
+/// # Errors
+///
+/// 数据长度不足或魔数 cookie 不匹配时返回 `StunError::MissingMappedAddress`。
+/// Returns `StunError::MissingMappedAddress` if data is too short or magic cookie mismatches.
 fn parse_response(data: &[u8]) -> Result<(u16, [u8; 12], &[u8]), StunError> {
     if data.len() < HEADER_LEN {
         return Err(StunError::MissingMappedAddress);
@@ -119,6 +160,14 @@ fn parse_response(data: &[u8]) -> Result<(u16, [u8; 12], &[u8]), StunError> {
     Ok((msg_type, tx_id, attrs))
 }
 
+/// 从属性字节中解析 XOR-MAPPED-ADDRESS 属性，返回映射后的公网地址。
+/// Parse the XOR-MAPPED-ADDRESS attribute from attribute bytes,
+/// returning the mapped public address.
+///
+/// # Returns
+///
+/// 解析成功返回 `Some(SocketAddr)`，未找到或格式错误返回 `None`。
+/// Returns `Some(SocketAddr)` on success, `None` if not found or malformed.
 fn parse_xor_mapped_address(attrs: &[u8]) -> Option<SocketAddr> {
     let mut pos = 0;
     while pos + 4 <= attrs.len() {
@@ -152,7 +201,11 @@ fn parse_xor_mapped_address(attrs: &[u8]) -> Option<SocketAddr> {
     None
 }
 
+/// Fuzz 测试辅助函数：将任意字节作为 STUN Binding 响应解析。
+/// 仅供测试使用。
+///
 /// Fuzz helper: parse arbitrary bytes as a STUN binding response.
+/// For testing only.
 #[doc(hidden)]
 pub fn fuzz_stun_response(data: &[u8]) {
     if let Ok((_msg_type, _tx_id, attrs)) = parse_response(data) {

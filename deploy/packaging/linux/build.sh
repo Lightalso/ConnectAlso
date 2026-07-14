@@ -1,14 +1,18 @@
 #!/bin/bash
-# ConnectAlso Linux Build & Packaging
-# ===================================
+# =============================================================================
+# Script: build.sh
+# Purpose: Builds ConnectAlso Linux binaries and packages them as DEB, RPM,
+#          and a portable tarball (.tar.gz)
+# 用途: 构建 ConnectAlso Linux 二进制文件，并打包为 DEB、RPM 和便携 tarball (.tar.gz)
 #
-# Prerequisites:
+# Prerequisites / 前置要求:
 #   - Rust 1.85+ (https://rustup.rs)
 #   - cargo-deb: cargo install cargo-deb
-#   - cargo-rpm: cargo install cargo-generate-rpm (optional)
+#   - cargo-rpm: cargo install cargo-generate-rpm (optional / 可选)
 #   - dpkg-dev (for DEB), rpm-build (for RPM)
 #
-# Usage: ./deploy/packaging/linux/build.sh 0.1.0
+# Usage / 用法: ./deploy/packaging/linux/build.sh 0.1.0
+# =============================================================================
 
 set -e
 
@@ -19,7 +23,7 @@ STAGE="$OUTDIR/connectalso-$VERSION"
 
 echo -e "\033[36mConnectAlso Linux Build v$VERSION\033[0m"
 
-# 1. Build
+# 1. Build / 构建
 echo -e "\033[33m[1/5] Building Rust binaries...\033[0m"
 cd "$ROOT"
 cargo build --release \
@@ -30,7 +34,7 @@ cargo build --release \
     -p connectalso-cli \
     -p connectalso-desktop
 
-# 2. Stage
+# 2. Stage / 暂存文件
 echo -e "\033[33m[2/5] Staging files...\033[0m"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/usr/local/bin"
@@ -50,7 +54,7 @@ cp "$ROOT/README.md" "$STAGE/usr/share/doc/connectalso/"
 cp "$ROOT/LICENSE"   "$STAGE/usr/share/doc/connectalso/"
 cp "$ROOT/deploy/systemd/connectalso-daemon.service" "$STAGE/lib/systemd/system/"
 
-# 3. DEB package
+# 3. DEB package / DEB 软件包
 echo -e "\033[33m[3/5] Building DEB package...\033[0m"
 
 cat > "$STAGE/DEBIAN/control" << EOF
@@ -91,7 +95,7 @@ chmod +x "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/prerm"
 
 dpkg-deb --build "$STAGE" "$OUTDIR/connectalso_${VERSION}_amd64.deb"
 
-# 4. RPM package
+# 4. RPM package / RPM 软件包
 echo -e "\033[33m[4/5] Building RPM package...\033[0m"
 mkdir -p "$STAGE/rpmbuild/SPECS"
 
@@ -139,7 +143,7 @@ else
     echo "rpmbuild not found — skipping RPM"
 fi
 
-# 5. Tarball
+# 5. Tarball / Tarball 压缩包
 echo -e "\033[33m[5/5] Creating tarball...\033[0m"
 tar -czf "$OUTDIR/connectalso-${VERSION}-linux-x86_64.tar.gz" \
     -C "$STAGE" usr etc lib

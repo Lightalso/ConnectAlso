@@ -1,22 +1,43 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
+/// 带延迟跟踪的中继服务器。
+///
+/// # Fields
+///
+/// * `addr` — 服务器地址。
+/// * `latency` — 测量的延迟（None表示尚未测量）。
+/// * `last_probe` — 上次测量延迟的时间。
+/// * `healthy` — 该中继当前是否被视为健康。
+/// * `failures` — 连续失败次数。
+///
 /// A relay server with latency tracking.
 #[derive(Debug, Clone)]
 pub struct RelayServer {
+    /// 服务器地址。
     /// Server address.
     pub addr: SocketAddr,
+    /// 测量的延迟（None表示尚未测量）。
     /// Measured latency (None = not yet measured).
     pub latency: Option<Duration>,
+    /// 上次测量延迟的时间。
     /// When the latency was last measured.
     pub last_probe: Option<Instant>,
+    /// 该中继当前是否被视为健康。
     /// Whether this relay is currently considered healthy.
     pub healthy: bool,
+    /// 连续失败次数。
     /// Consecutive failures.
     pub failures: u32,
 }
 
 impl RelayServer {
+    /// 创建新的中继服务器条目。
+    ///
+    /// # Returns
+    ///
+    /// * 初始化为健康状态的`RelayServer`。
+    ///
     /// Create a new relay server entry.
     #[must_use]
     pub fn new(addr: SocketAddr) -> Self {
@@ -24,6 +45,13 @@ impl RelayServer {
     }
 }
 
+/// 中继服务器池，支持自动选择和故障转移。
+///
+/// # Fields
+///
+/// * `servers` — 中继服务器列表。
+/// * `active` — 当前活跃中继的索引。
+///
 /// A pool of relay servers with automatic selection and failover.
 pub struct RelayPool {
     servers: Vec<RelayServer>,
@@ -32,6 +60,12 @@ pub struct RelayPool {
 }
 
 impl RelayPool {
+    /// 使用给定的服务器地址创建新的中继池。
+    ///
+    /// # Panics
+    ///
+    /// 如果`addrs`为空则触发panic。
+    ///
     /// Create a new relay pool with the given server addresses.
     ///
     /// # Panics
@@ -41,24 +75,47 @@ impl RelayPool {
         Self { servers: addrs.iter().map(|a| RelayServer::new(*a)).collect(), active: 0 }
     }
 
+    /// 返回当前活跃中继地址。
+    ///
+    /// # Returns
+    ///
+    /// * 当前活跃中继的`SocketAddr`。
+    ///
     /// Return the currently active relay address.
     #[must_use]
     pub fn active_addr(&self) -> SocketAddr {
         self.servers[self.active].addr
     }
 
+    /// 返回池中中继服务器的数量。
+    ///
+    /// # Returns
+    ///
+    /// * 中继服务器数量。
+    ///
     /// Return the number of relay servers in the pool.
     #[must_use]
     pub fn len(&self) -> usize {
         self.servers.len()
     }
 
+    /// 如果池中没有中继服务器则返回`true`。
+    ///
+    /// # Returns
+    ///
+    /// * 池为空时返回`true`。
+    ///
     /// Return `true` if the pool contains no relay servers.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.servers.is_empty()
     }
 
+    /// 探测所有中继服务器并更新延迟测量。
+    ///
+    /// 向每台服务器发送一个小型UDP数据包并测量往返时间。
+    /// 更新`latency`、`last_probe`和`healthy`字段。
+    ///
     /// Probe all relay servers and update latency measurements.
     ///
     /// Sends a small UDP packet to each server and measures RTT.
@@ -99,6 +156,12 @@ impl RelayPool {
         self.select_best();
     }
 
+    /// 标记当前活跃中继为失败并切换到下一个健康的中继。
+    ///
+    /// # Returns
+    ///
+    /// * 发生故障转移时返回`true`。
+    ///
     /// Mark the active relay as failed and switch to the next healthy one.
     ///
     /// Returns `true` if a failover occurred.
@@ -137,6 +200,12 @@ impl RelayPool {
         // If no healthy relay, keep current active (will retry)
     }
 
+    /// 返回所有中继的诊断摘要。
+    ///
+    /// # Returns
+    ///
+    /// * `Vec<RelaySummary>` 中继状态摘要列表。
+    ///
     /// Return a summary of all relays for diagnostics.
     #[must_use]
     pub fn summary(&self) -> Vec<RelaySummary> {
@@ -153,15 +222,28 @@ impl RelayPool {
     }
 }
 
+/// 用于诊断显示的中继服务器摘要。
+///
+/// # Fields
+///
+/// * `addr` — 服务器地址。
+/// * `latency_ms` — 以毫秒为单位的测量延迟（如果有的话）。
+/// * `healthy` — 该中继当前是否被视为健康。
+/// * `active` — 该中继是否为当前活跃（选中）的。
+///
 /// Summary of a relay server for diagnostics display.
 #[derive(Debug)]
 pub struct RelaySummary {
+    /// 服务器地址。
     /// Server address.
     pub addr: SocketAddr,
+    /// 以毫秒为单位的测量延迟（如果有的话）。
     /// Measured latency in milliseconds, if known.
     pub latency_ms: Option<u64>,
+    /// 该中继当前是否被视为健康。
     /// Whether the relay is currently considered healthy.
     pub healthy: bool,
+    /// 该中继是否为当前活跃（选中）的。
     /// Whether this relay is the active (selected) one.
     pub active: bool,
 }

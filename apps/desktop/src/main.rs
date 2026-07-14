@@ -1,3 +1,4 @@
+//! ConnectAlso 桌面托盘应用。
 //! ConnectAlso desktop tray application.
 
 use std::time::Duration;
@@ -9,39 +10,76 @@ use tray_icon::{Icon, TrayIconBuilder};
 
 const DAEMON_URL: &str = "http://127.0.0.1:9823";
 
+/// 守护进程状态响应数据。
+/// Daemon status response data.
 #[derive(Debug, Deserialize, Default)]
 struct StatusResponse {
+    /// 设备唯一标识符。
+    /// Unique device identifier.
     device_id: String,
+    /// 虚拟 IP 地址。
+    /// Virtual IP address.
     #[allow(dead_code)]
     virtual_ip: String,
+    /// 主机名。
+    /// Hostname.
     #[allow(dead_code)]
     hostname: String,
+    /// 运行时长（秒）。
+    /// Uptime in seconds.
     #[allow(dead_code)]
     uptime_secs: u64,
+    /// 已连接的对等节点数量。
+    /// Number of connected peers.
     peer_count: usize,
+    /// 对等节点列表。
+    /// List of connected peers.
     #[serde(default)]
     peers: Vec<StatusPeer>,
 }
 
+/// 对等节点状态信息。
+/// Status information for a connected peer.
 #[derive(Debug, Deserialize, Default)]
 struct StatusPeer {
+    /// 对等节点主机名。
+    /// Peer hostname.
     #[serde(default)]
     #[allow(dead_code)]
     hostname: String,
+    /// 对等节点虚拟 IP。
+    /// Peer virtual IP address.
     #[serde(default)]
     #[allow(dead_code)]
     virtual_ip: String,
+    /// 连接路径类型（direct / relay / probing）。
+    /// Connection path type (direct / relay / probing).
     #[serde(default)]
     path: String,
 }
 
+/// 系统托盘图标对应的连接状态。
+/// Connection status represented by the tray icon.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ConnStatus {
+    /// P2P 直连。
+    /// Direct P2P connection.
     Connected,
+    /// 仅通过中继连接。
+    /// Connected via relay only.
     RelayOnly,
+    /// 未连接。
+    /// Disconnected.
     Disconnected,
 }
 
+/// 根据 RGBA 颜色生成一个 32x32 的圆形托盘图标。
+/// Generate a 32x32 circular tray icon from an RGBA color.
+///
+/// # Panics
+///
+/// 如果 RGBA 数据无效则会 panic。
+/// Panics if the RGBA data is invalid.
 fn make_icon(color: [u8; 4]) -> Icon {
     let (r, g, b, a) = (color[0], color[1], color[2], color[3]);
     let size: u32 = 32;
@@ -62,6 +100,20 @@ fn make_icon(color: [u8; 4]) -> Icon {
     Icon::from_rgba(rgba, size, size).expect("valid icon")
 }
 
+/// 根据连接状态返回对应的 RGBA 颜色值。
+/// Return the RGBA color corresponding to the connection status.
+///
+/// | Status       | Color  |
+/// |--------------|--------|
+/// | Connected    | 绿色   |
+/// | RelayOnly    | 橙色   |
+/// | Disconnected | 灰色   |
+///
+/// | Status       | Color  |
+/// |--------------|--------|
+/// | Connected    | Green  |
+/// | RelayOnly    | Orange |
+/// | Disconnected | Gray   |
 fn status_color(status: ConnStatus) -> [u8; 4] {
     match status {
         ConnStatus::Connected => [0x4C, 0xAF, 0x50, 0xFF],
@@ -70,6 +122,8 @@ fn status_color(status: ConnStatus) -> [u8; 4] {
     }
 }
 
+/// 将连接状态转换为可读的文本标签。
+/// Convert the connection status to a human-readable label.
 fn fmt_status(status: ConnStatus) -> &'static str {
     match status {
         ConnStatus::Connected => "Connected (P2P)",
@@ -78,6 +132,13 @@ fn fmt_status(status: ConnStatus) -> &'static str {
     }
 }
 
+/// 通过 HTTP 请求获取守护进程的连接状态。
+/// Fetch the daemon's connection status via HTTP.
+///
+/// # Returns
+///
+/// 根据对等节点的路径类型返回对应的 [`ConnStatus`]。
+/// Returns [`ConnStatus`] based on the peers' path types.
 async fn fetch_status(url: &str) -> ConnStatus {
     match reqwest::get(format!("{url}/status")).await {
         Ok(r) if r.status().is_success() => match r.json::<StatusResponse>().await {
@@ -96,6 +157,13 @@ async fn fetch_status(url: &str) -> ConnStatus {
     }
 }
 
+/// 桌面托盘应用入口：创建系统托盘图标并周期性轮询状态。
+/// Desktop tray application entry: create tray icon and poll status periodically.
+///
+/// # Errors
+///
+/// 如果无法创建系统托盘图标则返回错误。
+/// Returns an error if the system tray icon cannot be created.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();

@@ -1,13 +1,24 @@
 #!/bin/bash
-# NAT Gateway B — Symmetric NAT
+# =============================================================================
+# Script: gateway-b.sh
+# Purpose: Configures a Linux host as a Symmetric NAT gateway for NAT
+#          traversal testing. Simulates the strictest NAT behavior found
+#          in enterprise networks.
+# 用途: 配置 Linux 主机作为对称 NAT 网关，用于 NAT 穿透测试。
+#       模拟企业网络中最严格的 NAT 行为。
 #
-# 模拟企业/严格 NAT 行为:
+# 模拟的 NAT 行为 / Simulated NAT behavior:
 #   - 每个目标 IP:Port 组合分配不同的源端口 (random MASQUERADE)
+#     Different source port assigned per destination IP:Port
 #   - 入站仅允许已建立连接的回包
+#     Inbound only allows replies to established connections
 #   - 外部主机必须使用与出站包完全相同的 IP:Port
+#     External host must use the exact same IP:Port as the outbound packet
+# =============================================================================
 
 set -e
 
+# Apply iptables rules for Symmetric NAT / 应用对称 NAT 的 iptables 规则
 echo "[gateway-b] Setting up Symmetric NAT..."
 
 # 启用转发

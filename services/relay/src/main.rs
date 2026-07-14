@@ -1,3 +1,4 @@
+//! ConnectAlso 中继服务 — 在对等节点之间转发加密数据包。
 //! ConnectAlso relay service — forwards encrypted packets between peers.
 
 use std::collections::HashMap;
@@ -7,16 +8,24 @@ use clap::Parser;
 use connectalso_relay_proto::{MsgType, PeerId, RelayFrame};
 use tracing_subscriber::EnvFilter;
 
+/// 一个轻量中继服务器，在对等节点之间转发加密数据包。
+///
+/// 中继从不解密载荷——它仅读取帧头以确定路由目标。
+/// 所有载荷数据均为不透明的密文。
+///
 /// A minimal relay server that forwards encrypted packets between peers.
 ///
 /// The relay never decrypts payloads — it only reads frame headers to
 /// determine routing. All payload data is opaque ciphertext.
 
+/// 命令行参数。
+/// Command-line arguments.
 #[derive(Parser)]
 #[command(name = "connectalso-relay")]
 #[command(about = "ConnectAlso 流量中继服务")]
 struct Cli {
-    /// 监听地址
+    /// 监听地址。
+    /// Listening address.
     #[arg(long, default_value = "0.0.0.0:33478")]
     listen: SocketAddr,
 }

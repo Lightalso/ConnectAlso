@@ -1,3 +1,4 @@
+//! ConnectAlso STUN 服务 — 响应 Binding Request (RFC 5389)。
 //! ConnectAlso STUN service — responds to Binding Requests (RFC 5389).
 
 use std::net::{IpAddr, SocketAddr};
@@ -5,19 +6,40 @@ use std::net::{IpAddr, SocketAddr};
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
+/// STUN 魔数 (RFC 5389)。
+/// STUN magic cookie (RFC 5389).
 const MAGIC_COOKIE: u32 = 0x2112_A442;
+/// STUN Binding Request 消息类型。
+/// STUN Binding Request message type.
 const BINDING_REQUEST: u16 = 0x0001;
+/// STUN Binding Success Response 消息类型。
+/// STUN Binding Success Response message type.
 const BINDING_SUCCESS: u16 = 0x0101;
+/// XOR-Mapped-Address 属性类型。
+/// XOR-Mapped-Address attribute type.
 const ATTR_XOR_MAPPED_ADDRESS: u16 = 0x0020;
 
+/// 命令行参数。
+/// Command-line arguments.
 #[derive(Parser)]
 #[command(name = "connectalso-stun")]
 #[command(about = "ConnectAlso STUN 服务 (仅用于开发测试)")]
 struct Cli {
+    /// 监听地址。
+    /// Listening address.
     #[arg(long, default_value = "0.0.0.0:3478")]
     listen: SocketAddr,
 }
 
+/// 主入口：启动 UDP 监听循环，处理 Binding Request。
+///
+/// # Errors
+/// 绑定端口失败时返回错误。
+///
+/// Main entry point: start UDP listening loop, handle Binding Requests.
+///
+/// # Errors
+/// Returns an error if port binding fails.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
@@ -36,6 +58,15 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+/// 处理 STUN Binding Request，返回 Binding Success Response。
+///
+/// # Returns
+/// 返回 `Some(response_bytes)` 如果请求有效，否则返回 `None`。
+///
+/// Handle a STUN Binding Request, return a Binding Success Response.
+///
+/// # Returns
+/// Returns `Some(response_bytes)` if the request is valid, otherwise `None`.
 fn handle_binding_request(data: &[u8], client_addr: SocketAddr) -> Option<Vec<u8>> {
     if data.len() < 20 {
         return None;
@@ -65,6 +96,13 @@ fn handle_binding_request(data: &[u8], client_addr: SocketAddr) -> Option<Vec<u8
     Some(response)
 }
 
+/// 构建 XOR-Mapped-Address 属性（IPv4）。
+///
+/// 地址通过异或魔数的高 32 位进行混淆。
+///
+/// Build XOR-Mapped-Address attribute (IPv4).
+///
+/// The address is obfuscated by XORing with the magic cookie.
 fn build_xor_mapped_v4(ip: std::net::Ipv4Addr, port: u16) -> Vec<u8> {
     let x_port = port ^ (MAGIC_COOKIE >> 16) as u16;
     let addr_bits = u32::from_be_bytes(ip.octets());
@@ -80,6 +118,13 @@ fn build_xor_mapped_v4(ip: std::net::Ipv4Addr, port: u16) -> Vec<u8> {
     attr
 }
 
+/// 构建 XOR-Mapped-Address 属性（IPv6）。
+///
+/// 地址前 4 字节通过异或魔数进行混淆。
+///
+/// Build XOR-Mapped-Address attribute (IPv6).
+///
+/// The first 4 bytes of the address are obfuscated by XORing with the magic cookie.
 fn build_xor_mapped_v6(ip: std::net::Ipv6Addr, port: u16) -> Vec<u8> {
     let x_port = port ^ (MAGIC_COOKIE >> 16) as u16;
     let octets = ip.octets();

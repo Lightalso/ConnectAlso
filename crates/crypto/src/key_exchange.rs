@@ -1,4 +1,14 @@
+//! # Key Exchange
+//!
 //! X25519 密钥交换与会话密钥派生。
+//! X25519 key exchange and session key derivation.
+//!
+//! Supports ephemeral key pair generation, Diffie-Hellman shared secret
+//! derivation, and ChaCha20-Poly1305 AEAD session encryption with
+//! monotonic nonce counters.
+//!
+//! 支持临时密钥对生成、Diffie-Hellman 共享密钥派生，
+//! 以及使用单调 nonce 计数器的 ChaCha20-Poly1305 AEAD 会话加密。
 
 use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, Nonce};
@@ -10,17 +20,21 @@ const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
 const TAG_LEN: usize = 16;
 
+/// 加密操作错误类型。
 /// Cryptographic operation errors.
 #[derive(Debug, Error)]
 pub enum CryptoError {
+    /// 加密失败。
     /// Encryption failed.
     #[error("encryption failed")]
     Encrypt,
+    /// 解密失败（密钥错误、数据被篡改或包损坏）。
     /// Decryption failed (wrong key, tampered data, or corrupted packet).
     #[error("decryption failed")]
     Decrypt,
 }
 
+/// X25519 密钥对，用于单方通信。
 /// An X25519 key pair for a single party.
 pub struct KeyPair {
     secret: EphemeralSecret,
@@ -28,6 +42,7 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
+    /// 生成一个新的随机 X25519 密钥对。
     /// Generate a new random X25519 key pair.
     pub fn generate() -> Self {
         let secret = EphemeralSecret::random();
@@ -36,14 +51,17 @@ impl KeyPair {
         Self { secret, public }
     }
 
+    /// 返回公钥字节。
     /// Return the public key bytes.
     #[must_use]
     pub fn public_key_bytes(&self) -> [u8; KEY_LEN] {
         *self.public.as_bytes()
     }
 
+    /// 执行 Diffie-Hellman 密钥交换，与对端派生共享密钥。
     /// Perform Diffie-Hellman to derive a shared secret with a peer.
     ///
+    /// 消耗密钥对（临时密钥为单次使用）。
     /// Consumes the key pair (ephemeral secret is single-use).
     #[must_use]
     pub fn diffie_hellman(self, peer_public: &[u8; KEY_LEN]) -> [u8; KEY_LEN] {
@@ -53,6 +71,7 @@ impl KeyPair {
     }
 }
 
+/// 会话加密状态，用于单个通信方向。
 /// Session encryption state for a single communication direction.
 pub struct SessionCipher {
     cipher: ChaCha20Poly1305,
@@ -60,6 +79,7 @@ pub struct SessionCipher {
 }
 
 impl SessionCipher {
+    /// 使用原始 32 字节共享密钥创建新的会话加密器。
     /// Create a new session cipher from a raw 32-byte shared secret.
     #[must_use]
     pub fn new(shared_secret: &[u8; KEY_LEN], init_counter: u64) -> Self {
@@ -68,12 +88,16 @@ impl SessionCipher {
         Self { cipher, counter: init_counter }
     }
 
+    /// 加密明文包，返回带 nonce 前缀的 AEAD 认证密文。
     /// Encrypt a plaintext packet, returning the AEAD-authenticated ciphertext
     /// with the nonce prepended.
     ///
+    /// 输出格式：`[nonce: 12 bytes][ciphertext: plaintext.len() + 16 bytes]`
     /// Output format: `[nonce: 12 bytes][ciphertext: plaintext.len() + 16 bytes]`
     ///
     /// # Errors
+    ///
+    /// 如果加密操作失败，返回 `CryptoError::Encrypt`。
     /// Returns `CryptoError::Encrypt` if the encryption operation fails.
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let nonce = self.next_nonce();
@@ -85,11 +109,15 @@ impl SessionCipher {
         Ok(packet)
     }
 
+    /// 解密从对端接收的包。
     /// Decrypt a packet received from the peer.
     ///
+    /// 输入格式：`[nonce: 12 bytes][ciphertext + tag]`
     /// Expects input format: `[nonce: 12 bytes][ciphertext + tag]`
     ///
     /// # Errors
+    ///
+    /// 如果认证失败，返回 `CryptoError::Decrypt`。
     /// Returns `CryptoError::Decrypt` if authentication fails.
     pub fn decrypt(&self, packet: &[u8]) -> Result<Vec<u8>, CryptoError> {
         if packet.len() < NONCE_LEN + TAG_LEN {

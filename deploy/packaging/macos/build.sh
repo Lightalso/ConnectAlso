@@ -1,13 +1,19 @@
 #!/bin/bash
-# ConnectAlso macOS Build & Packaging
-# ===================================
+# =============================================================================
+# Script: build.sh
+# Purpose: Builds ConnectAlso macOS universal (x86_64 + arm64) binaries,
+#          creates a PKG installer, and a portable tarball. Supports optional
+#          code signing and notarization.
+# 用途: 构建 ConnectAlso macOS 通用二进制文件（x86_64 + arm64），
+#       创建 PKG 安装程序和便携 tarball。支持可选的代码签名和公证。
 #
-# Prerequisites:
+# Prerequisites / 前置要求:
 #   - Rust 1.85+ with aarch64-apple-darwin and x86_64-apple-darwin targets
 #   - Apple Developer ID certificate in Keychain
 #   - Xcode Command Line Tools
 #
-# Usage: ./deploy/packaging/macos/build.sh 0.1.0 [sign|notarize]
+# Usage / 用法: ./deploy/packaging/macos/build.sh 0.1.0 [sign|notarize]
+# =============================================================================
 
 set -e
 
@@ -20,7 +26,7 @@ APP_DIR="$STAGE/ConnectAlso.app"
 
 echo -e "\033[36mConnectAlso macOS Build v$VERSION\033[0m"
 
-# 1. Build universal binary
+# 1. Build universal binary / 构建通用二进制文件
 echo -e "\033[33m[1/5] Building universal binaries...\033[0m"
 cd "$ROOT"
 
@@ -38,7 +44,7 @@ for target in "${TARGETS[@]}"; do
         -p connectalso-desktop 2>/dev/null || true
 done
 
-# 2. Create universal binaries with lipo
+# 2. Create universal binaries with lipo / 使用 lipo 创建通用二进制
 echo -e "\033[33m[2/5] Creating universal binaries...\033[0m"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/bin"
@@ -58,7 +64,7 @@ cp "$ROOT/README.md" "$STAGE/"
 cp "$ROOT/LICENSE"   "$STAGE/"
 cp "$ROOT/deploy/launchd/com.connectalso.daemon.plist" "$STAGE/"
 
-# 3. Code sign
+# 3. Code sign / 代码签名
 if [ "$ACTION" = "sign" ] || [ "$ACTION" = "notarize" ]; then
     echo -e "\033[33m[3/5] Code signing...\033[0m"
     IDENTITY="${CODE_SIGN_IDENTITY:-Developer ID Application}"
@@ -67,7 +73,7 @@ if [ "$ACTION" = "sign" ] || [ "$ACTION" = "notarize" ]; then
     done
 fi
 
-# 4. Create PKG installer
+# 4. Create PKG installer / 创建 PKG 安装程序
 echo -e "\033[33m[4/5] Creating PKG installer...\033[0m"
 PKG_ROOT="$STAGE/pkgroot"
 mkdir -p "$PKG_ROOT/usr/local/bin"
@@ -83,7 +89,7 @@ pkgbuild \
     --install-location / \
     "$OUTDIR/connectalso-${VERSION}.pkg"
 
-# 5. Notarize (optional)
+# 5. Notarize (optional) / 公证（可选）
 if [ "$ACTION" = "notarize" ]; then
     echo -e "\033[33m[5/5] Notarizing...\033[0m"
     APPLE_ID="${APPLE_ID:-}"
@@ -102,7 +108,7 @@ else
     echo -e "\033[33m[5/5] Skipping notarization\033[0m"
 fi
 
-# Also create tarball
+# Also create tarball / 同时创建 tarball
 tar -czf "$OUTDIR/connectalso-${VERSION}-darwin-universal.tar.gz" -C "$STAGE" bin README.md LICENSE
 
 echo ""

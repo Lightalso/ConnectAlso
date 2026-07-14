@@ -7,16 +7,25 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+/// 设备状态。
 /// Device status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum DeviceStatus {
+    /// 待审批。
+    /// Pending approval.
     Pending = 0,
+    /// 已审批通过。
+    /// Approved.
     Approved = 1,
+    /// 已撤销。
+    /// Revoked.
     Revoked = -1,
 }
 
 impl DeviceStatus {
+    /// 从数据库整数转换设备状态。
+    /// Convert device status from database integer.
     pub const fn from_i32(v: i32) -> Self {
         match v {
             1 => Self::Approved,
@@ -26,19 +35,42 @@ impl DeviceStatus {
     }
 }
 
+/// 数据库中的设备记录。
 /// Database record for a registered device.
 #[derive(Debug, Clone)]
 pub struct DeviceRecord {
+    /// 设备唯一标识。
+    /// Device unique identifier.
     pub device_id: Uuid,
+    /// X25519 公钥。
+    /// X25519 public key.
     pub public_key: [u8; 32],
+    /// 设备主机名。
+    /// Device hostname.
     pub hostname: String,
+    /// 分配的虚拟 IPv4 地址。
+    /// Assigned virtual IPv4 address.
     pub ipv4: Ipv4Addr,
+    /// 设备状态。
+    /// Device status.
     pub status: DeviceStatus,
+    /// 注册时间（UNIX 秒）。
+    /// Registration timestamp (UNIX seconds).
     pub created_at: i64,
+    /// 最后活跃时间（UNIX 秒）。
+    /// Last seen timestamp (UNIX seconds).
     pub last_seen: i64,
 }
 
+/// 初始化 SQLite 数据库并创建所有表。
+///
+/// # Errors
+/// 返回错误如果无法打开数据库或执行建表语句。
+///
 /// Initialize the SQLite database and create tables.
+///
+/// # Errors
+/// Returns an error if the database cannot be opened or schema creation fails.
 pub async fn init_db(path: &str) -> anyhow::Result<SqlitePool> {
     let opts = SqliteConnectOptions::from_str(path)?.create_if_missing(true);
 
@@ -109,6 +141,7 @@ pub async fn init_db(path: &str) -> anyhow::Result<SqlitePool> {
     Ok(pool)
 }
 
+/// 按公钥查找设备，未找到返回 `None`。
 /// Find a device by its public key, or return `None`.
 pub async fn find_by_public_key(pool: &SqlitePool, pk: &[u8; 32]) -> Option<DeviceRecord> {
     sqlx::query_as::<_, DeviceRow>(
@@ -122,7 +155,15 @@ pub async fn find_by_public_key(pool: &SqlitePool, pk: &[u8; 32]) -> Option<Devi
     .map(|r| r.into())
 }
 
+/// 插入新设备记录。
+///
+/// # Errors
+/// 如果公钥或 IP 重复则返回数据库错误。
+///
 /// Insert a new device.
+///
+/// # Errors
+/// Returns a database error if public key or IP is duplicate.
 pub async fn insert_device(pool: &SqlitePool, dev: &DeviceRecord) -> anyhow::Result<()> {
     sqlx::query(
         r#"
@@ -142,7 +183,15 @@ pub async fn insert_device(pool: &SqlitePool, dev: &DeviceRecord) -> anyhow::Res
     Ok(())
 }
 
+/// 更新设备的 `last_seen` 时间戳（心跳）。
+///
+/// # Returns
+/// 返回 `true` 如果设备存在且更新成功。
+///
 /// Update only the last_seen timestamp.
+///
+/// # Returns
+/// Returns `true` if the device exists and was updated.
 pub async fn heartbeat(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<bool> {
     let now = unix_now();
     let rows = sqlx::query("UPDATE devices SET last_seen = ? WHERE device_id = ?")
@@ -153,7 +202,15 @@ pub async fn heartbeat(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<boo
     Ok(rows.rows_affected() > 0)
 }
 
+/// 列出所有已审批的设备（供节点发现）。
+///
+/// # Errors
+/// 数据库查询失败时返回错误。
+///
 /// List all approved devices (for peer discovery).
+///
+/// # Errors
+/// Returns an error on database query failure.
 pub async fn list_approved(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord>> {
     let rows = sqlx::query_as::<_, DeviceRow>(
         "SELECT device_id, public_key, hostname, ipv4, status, created_at, last_seen
@@ -164,7 +221,15 @@ pub async fn list_approved(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord
     Ok(rows.into_iter().map(|r| r.into()).collect())
 }
 
+/// 列出所有设备（供管理端），含所有状态。
+///
+/// # Errors
+/// 数据库查询失败时返回错误。
+///
 /// List all devices (for admin).
+///
+/// # Errors
+/// Returns an error on database query failure.
 pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord>> {
     let rows = sqlx::query_as::<_, DeviceRow>(
         "SELECT device_id, public_key, hostname, ipv4, status, created_at, last_seen FROM devices ORDER BY created_at",
@@ -174,7 +239,15 @@ pub async fn list_all(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord>> {
     Ok(rows.into_iter().map(|r| r.into()).collect())
 }
 
+/// 列出待审批设备（status = 0）。
+///
+/// # Errors
+/// 数据库查询失败时返回错误。
+///
 /// List pending devices (status = 0).
+///
+/// # Errors
+/// Returns an error on database query failure.
 pub async fn list_pending(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord>> {
     let rows = sqlx::query_as::<_, DeviceRow>(
         "SELECT device_id, public_key, hostname, ipv4, status, created_at, last_seen
@@ -185,6 +258,7 @@ pub async fn list_pending(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord>
     Ok(rows.into_iter().map(|r| r.into()).collect())
 }
 
+/// 按 ID 查找设备。
 /// Find a device by ID.
 #[allow(dead_code)]
 pub async fn find_by_id(pool: &SqlitePool, device_id: Uuid) -> Option<DeviceRecord> {
@@ -200,7 +274,15 @@ pub async fn find_by_id(pool: &SqlitePool, device_id: Uuid) -> Option<DeviceReco
     .map(|r| r.into())
 }
 
+/// 审批一台待审批设备。
+///
+/// # Returns
+/// 如果设备存在且状态为 pending 则返回 `true`。
+///
 /// Approve a pending device.
+///
+/// # Returns
+/// Returns `true` if the device exists and was in pending state.
 pub async fn approve_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<bool> {
     let rows = sqlx::query("UPDATE devices SET status = 1 WHERE device_id = ? AND status = 0")
         .bind(device_id.to_string())
@@ -209,7 +291,15 @@ pub async fn approve_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Resul
     Ok(rows.rows_affected() > 0)
 }
 
+/// 撤销已审批的设备：释放 IP，将状态设为 revoked。
+///
+/// # Returns
+/// 返回 `true` 如果设备存在且成功撤销。
+///
 /// Revoke an approved device (keeps record, frees IP).
+///
+/// # Returns
+/// Returns `true` if the device exists and was successfully revoked.
 pub async fn revoke_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<bool> {
     // Free IP
     sqlx::query("DELETE FROM ip_pool WHERE ipv4 = (SELECT ipv4 FROM devices WHERE device_id = ?)")
@@ -224,7 +314,15 @@ pub async fn revoke_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result
     Ok(rows.rows_affected() > 0)
 }
 
+/// 完全删除设备记录及其 IP 分配。
+///
+/// # Returns
+/// 返回 `true` 如果设备存在且被删除。
+///
 /// Delete a device completely.
+///
+/// # Returns
+/// Returns `true` if the device existed and was deleted.
 pub async fn delete_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<bool> {
     sqlx::query("DELETE FROM ip_pool WHERE ipv4 = (SELECT ipv4 FROM devices WHERE device_id = ?)")
         .bind(device_id.to_string())
@@ -235,7 +333,15 @@ pub async fn delete_device(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result
     Ok(rows.rows_affected() > 0)
 }
 
+/// 清除超时未心跳的过期设备（保留 approved 设备）。
+///
+/// # Returns
+/// 返回清除的设备数量。
+///
 /// Remove devices that haven't sent a heartbeat in `timeout_secs`.
+///
+/// # Returns
+/// Returns the number of purged devices.
 pub async fn purge_stale(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result<usize> {
     let cutoff = unix_now() - timeout_secs;
     sqlx::query("DELETE FROM ip_pool WHERE ipv4 IN (SELECT ipv4 FROM devices WHERE last_seen < ?)")
@@ -254,6 +360,15 @@ pub async fn purge_stale(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result
 
 // ── IP Pool ──
 
+/// 从 IP 池中分配一个可用 IP。
+///
+/// # Returns
+/// 成功分配返回 `Some(Ipv4Addr)`，池已满则返回 `None`。
+///
+/// Allocate an IP from the pool.
+///
+/// # Returns
+/// Returns `Some(Ipv4Addr)` on successful allocation, `None` if pool is full.
 pub async fn allocate_ip(pool: &SqlitePool, base: u32, max_offset: u32) -> Option<Ipv4Addr> {
     let row =
         sqlx::query_as::<_, IpPoolRow>("SELECT ipv4, allocated FROM ip_pool WHERE allocated = 0 ORDER BY ipv4 LIMIT 1")
@@ -282,22 +397,35 @@ pub async fn allocate_ip(pool: &SqlitePool, base: u32, max_offset: u32) -> Optio
     Some(ip)
 }
 
+/// 获取已分配（已使用）的 IP 数量。
+/// Get the number of allocated (used) IPs.
 pub async fn allocated_count(pool: &SqlitePool) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool WHERE allocated = 1").fetch_one(pool).await.unwrap_or(0)
 }
 
+/// 获取 IP 池总大小。
+/// Get total IP pool size.
 pub async fn pool_size(pool: &SqlitePool) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM ip_pool").fetch_one(pool).await.unwrap_or(0)
 }
 
 // ── Backup & Restore ──
 
+/// 获取备份文件路径。
 /// Path to the backup file.
 pub fn backup_path(db_path: &str) -> String {
     format!("{db_path}.backup")
 }
 
+/// 创建数据库备份（复制 SQLite 文件）。
+///
+/// # Errors
+/// 如果数据库文件不存在或复制失败则返回错误。
+///
 /// Create a backup by copying the SQLite database file.
+///
+/// # Errors
+/// Returns an error if the database file doesn't exist or copy fails.
 pub async fn create_backup(db_path: &str) -> anyhow::Result<String> {
     let src = Path::new(db_path);
     let backup = backup_path(db_path);
@@ -311,7 +439,15 @@ pub async fn create_backup(db_path: &str) -> anyhow::Result<String> {
     Ok(dst.display().to_string())
 }
 
+/// 从备份文件还原数据库。
+///
+/// # Errors
+/// 如果备份文件不存在或复制失败则返回错误。
+///
 /// Restore from a backup file.
+///
+/// # Errors
+/// Returns an error if the backup file doesn't exist or copy fails.
 pub async fn restore_backup(db_path: &str) -> anyhow::Result<()> {
     let backup = backup_path(db_path);
     let src = Path::new(&backup);
@@ -326,6 +462,15 @@ pub async fn restore_backup(db_path: &str) -> anyhow::Result<()> {
 
 // ── Candidate exchange ──
 
+/// 插入或更新候选地址记录。
+///
+/// # Errors
+/// 数据库操作失败时返回错误。
+///
+/// Upsert a candidate address record.
+///
+/// # Errors
+/// Returns an error on database operation failure.
 pub async fn upsert_candidate(pool: &SqlitePool, device_id: Uuid, address: &str) -> anyhow::Result<()> {
     let now = unix_now();
     sqlx::query(
@@ -341,6 +486,15 @@ pub async fn upsert_candidate(pool: &SqlitePool, device_id: Uuid, address: &str)
     Ok(())
 }
 
+/// 获取指定设备的所有候选地址。
+///
+/// # Errors
+/// 数据库查询失败时返回错误。
+///
+/// Get all candidate addresses for a device.
+///
+/// # Errors
+/// Returns an error on database query failure.
 pub async fn get_candidates(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<Vec<String>> {
     let rows: Vec<(String,)> =
         sqlx::query_as("SELECT address FROM candidates WHERE device_id = ? ORDER BY updated_at DESC")
@@ -350,7 +504,15 @@ pub async fn get_candidates(pool: &SqlitePool, device_id: Uuid) -> anyhow::Resul
     Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
+/// 清除过期的候选地址条目。
+///
+/// # Returns
+/// 返回删除的记录数。
+///
 /// Purge stale candidate entries.
+///
+/// # Returns
+/// Returns the number of deleted records.
 #[allow(dead_code)]
 pub async fn purge_stale_candidates(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result<usize> {
     let cutoff = unix_now() - timeout_secs;
@@ -360,6 +522,8 @@ pub async fn purge_stale_candidates(pool: &SqlitePool, timeout_secs: i64) -> any
 
 // ── Row types ──
 
+/// 数据库设备表原始行结构。
+/// Database device table row struct.
 #[derive(sqlx::FromRow)]
 struct DeviceRow {
     device_id: String,
@@ -387,6 +551,8 @@ impl From<DeviceRow> for DeviceRecord {
     }
 }
 
+/// 数据库 IP 池表原始行结构。
+/// Database IP pool table row struct.
 #[derive(sqlx::FromRow)]
 struct IpPoolRow {
     ipv4: String,
@@ -396,6 +562,7 @@ struct IpPoolRow {
 
 // ── ACL ──
 
+/// ACL 规则的数据库行表示。
 /// A database row representing an ACL rule.
 #[derive(sqlx::FromRow, serde::Deserialize)]
 pub struct AclRuleRow {
@@ -409,6 +576,15 @@ pub struct AclRuleRow {
     pub dst_port: i32,
 }
 
+/// 列出所有 ACL 规则，按优先级排序。
+///
+/// # Errors
+/// 数据库查询失败时返回错误。
+///
+/// List all ACL rules ordered by priority.
+///
+/// # Errors
+/// Returns an error on database query failure.
 pub async fn list_acl_rules(pool: &SqlitePool) -> anyhow::Result<Vec<AclRuleRow>> {
     sqlx::query_as::<_, AclRuleRow>(
         "SELECT id, priority, action, src_ip, dst_ip, protocol, src_port, dst_port FROM acl_rules ORDER BY priority",
@@ -418,6 +594,15 @@ pub async fn list_acl_rules(pool: &SqlitePool) -> anyhow::Result<Vec<AclRuleRow>
     .map_err(Into::into)
 }
 
+/// 插入或更新一条 ACL 规则。
+///
+/// # Errors
+/// 数据库操作失败时返回错误。
+///
+/// Upsert (insert or update) an ACL rule.
+///
+/// # Errors
+/// Returns an error on database operation failure.
 pub async fn upsert_acl_rule(pool: &SqlitePool, rule: &AclRuleRow) -> anyhow::Result<()> {
     sqlx::query(
         "INSERT INTO acl_rules (id, priority, action, src_ip, dst_ip, protocol, src_port, dst_port)
@@ -440,6 +625,15 @@ pub async fn upsert_acl_rule(pool: &SqlitePool, rule: &AclRuleRow) -> anyhow::Re
     Ok(())
 }
 
+/// 删除一条 ACL 规则。
+///
+/// # Returns
+/// 返回 `true` 如果规则存在并被删除。
+///
+/// Delete an ACL rule.
+///
+/// # Returns
+/// Returns `true` if the rule existed and was deleted.
 pub async fn delete_acl_rule(pool: &SqlitePool, id: i64) -> anyhow::Result<bool> {
     let rows = sqlx::query("DELETE FROM acl_rules WHERE id = ?").bind(id).execute(pool).await?;
     Ok(rows.rows_affected() > 0)
@@ -447,6 +641,15 @@ pub async fn delete_acl_rule(pool: &SqlitePool, id: i64) -> anyhow::Result<bool>
 
 // ── DNS ──
 
+/// 列出 DNS 记录：已审批设备的主机名 → IP 映射。
+///
+/// # Errors
+/// 数据库查询失败时返回错误。
+///
+/// List DNS records: hostname → IP mapping for approved devices.
+///
+/// # Errors
+/// Returns an error on database query failure.
 pub async fn list_dns_records(pool: &SqlitePool) -> anyhow::Result<Vec<(String, String)>> {
     let rows: Vec<(String, String)> =
         sqlx::query_as("SELECT hostname, ipv4 FROM devices WHERE status = 1 AND hostname != '' AND ipv4 != ''")
@@ -455,6 +658,15 @@ pub async fn list_dns_records(pool: &SqlitePool) -> anyhow::Result<Vec<(String, 
     Ok(rows)
 }
 
+/// 获取当前 UNIX 时间戳（秒）。
+///
+/// # Panics
+/// 系统时钟早于 UNIX 纪元时静默返回 0。
+///
+/// Get the current UNIX timestamp in seconds.
+///
+/// # Panics
+/// Silently returns 0 if system clock is before UNIX epoch.
 fn unix_now() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64
 }
