@@ -1,0 +1,35 @@
+[licenses]
+# 允许的许可证（全部与 GPLv3 兼容）
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "Unlicense",
+]
+
+# 许可证例外
+exceptions = [
+    # tun2 使用 WTFPL，FSF 认为 GPL 兼容
+    # M2 后评估替代方案
+    { name = "tun2", allow = ["WTFPL"] },
+]
+
+# 禁止的许可证
+deny = [
+    "GPL-2.0-only",
+    "GPL-2.0-or-later",
+    "AGPL-3.0-only",
+    "AGPL-3.0-or-later",
+]
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
