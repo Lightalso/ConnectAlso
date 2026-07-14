@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use thiserror::Error;
-use tun2::{create_as_async, AsyncDevice, Configuration, Layer};
+use tun2::{Configuration, Device, Layer};
 
 const DEFAULT_MTU: u16 = 1500;
 
@@ -22,7 +22,12 @@ pub enum TunError {
 
     /// The receive buffer is too small for the configured MTU.
     #[error("buffer too small: need {need}, got {got}")]
-    BufferTooSmall { need: usize, got: usize },
+    BufferTooSmall {
+        /// Required buffer size.
+        need: usize,
+        /// Actual buffer size.
+        got: usize,
+    },
 }
 
 /// Configuration for creating a TUN device.
@@ -81,26 +86,24 @@ impl TunConfig {
 }
 
 /// A virtual TUN network device providing L3 packet send/receive.
-///
-/// Wraps [`tun2::AsyncDevice`] with a higher-level API and
-/// configuration tracking.
 pub struct TunDevice {
-    inner: AsyncDevice,
+    inner: Device,
     config: TunConfig,
 }
 
 impl TunDevice {
     /// Create a new TUN device with the given configuration.
-    ///
-    /// This instantiates the platform-specific TUN interface and
-    /// assigns the configured IP address and netmask.
     pub async fn create(config: TunConfig) -> Result<Self, TunError> {
         let tun2_config = config.to_tun2_config();
-        let device = create_as_async(&tun2_config).map_err(|e| TunError::Create(e.to_string()))?;
+        let device =
+            tokio::task::spawn_blocking(move || tun2::create(&tun2_config))
+                .await
+                .map_err(|e| TunError::Create(e.to_string()))?
+                .map_err(|e| TunError::Create(e.to_string()))?;
         Ok(Self { inner: device, config })
     }
 
-    /// Return the configured interface name, or `"tun"` if none was set.
+    /// Return the configured interface name.
     #[must_use]
     pub fn name(&self) -> &str {
         self.config.name.as_deref().unwrap_or("tun")
@@ -125,23 +128,22 @@ impl TunDevice {
     }
 
     /// Receive a raw IP packet from the TUN device.
-    ///
-    /// The buffer must be at least as large as the configured MTU.
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize, TunError> {
         if buf.len() < self.config.mtu as usize {
             return Err(TunError::BufferTooSmall { need: self.config.mtu as usize, got: buf.len() });
         }
-        self.inner.recv(buf).await.map_err(TunError::Recv)
+        let n = self.inner.recv(buf).map_err(TunError::Recv)?;
+        Ok(n)
     }
 
     /// Send a raw IP packet through the TUN device.
     pub async fn send(&self, packet: &[u8]) -> Result<usize, TunError> {
-        self.inner.send(packet).await.map_err(TunError::Send)
+        self.inner.send(packet).map_err(TunError::Send)
     }
 
-    /// Consume this wrapper and return the underlying [`AsyncDevice`].
+    /// Consume this wrapper and return the underlying device.
     #[must_use]
-    pub fn into_inner(self) -> AsyncDevice {
+    pub fn into_inner(self) -> Device {
         self.inner
     }
 }

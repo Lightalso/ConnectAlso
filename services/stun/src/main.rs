@@ -1,3 +1,5 @@
+//! ConnectAlso STUN service — responds to Binding Requests (RFC 5389).
+
 use std::net::{IpAddr, SocketAddr};
 
 use clap::Parser;

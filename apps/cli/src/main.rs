@@ -1,3 +1,5 @@
+//! ConnectAlso CLI — command-line interface for managing the daemon.
+
 use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
@@ -310,7 +312,8 @@ async fn cmd_admin_pending(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp = http.get(format!("{control_url}/api/v1/register/pending")).send().await?;
     let body: serde_json::Value = resp.json().await?;
-    let pending = body["pending"].as_array().unwrap_or(&vec![]);
+    let empty_arr = vec![];
+    let pending = body["pending"].as_array().unwrap_or(&empty_arr);
     if pending.is_empty() {
         println!("No pending devices.");
     } else {
@@ -355,7 +358,8 @@ async fn cmd_admin_revoke(control_url: &str, device_id: &str) -> anyhow::Result<
 async fn cmd_admin_peers(control_url: &str) -> anyhow::Result<()> {
     let http = reqwest::Client::new();
     let resp: serde_json::Value = http.get(format!("{control_url}/api/v1/admin/peers")).send().await?.json().await?;
-    let peers = resp["peers"].as_array().unwrap_or(&vec![]);
+    let empty_arr = vec![];
+    let peers = resp["peers"].as_array().unwrap_or(&empty_arr);
     println!("All devices ({})", peers.len());
     println!("  {:<38}  {:<16}  {:<12}  {}", "DEVICE ID", "IP", "STATUS", "HOSTNAME");
     for d in peers {

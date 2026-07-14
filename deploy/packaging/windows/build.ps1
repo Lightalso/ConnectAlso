@@ -11,13 +11,13 @@
 
 param(
     [string]$Version = "0.1.0",
-    [string]$OutputDir = "target\release",
     [string]$SignCert = "",
     [string]$SignPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+$OutputDir = "$Root\target\release"
 
 Write-Host "ConnectAlso Windows Build v$Version" -ForegroundColor Cyan
 
@@ -67,8 +67,8 @@ if ($SignCert -and $SignPassword) {
 
 # 4. Create MSI installer with WiX
 Write-Host "[4/5] Creating MSI installer..." -ForegroundColor Yellow
-
-$WixSource = @"
+if (Get-Command wix -ErrorAction SilentlyContinue) {
+    $WixSource = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="ConnectAlso" Manufacturer="ConnectAlso Contributors"
@@ -85,31 +85,31 @@ $WixSource = @"
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLDIR" Name="ConnectAlso">
           <ComponentGroup Id="Binaries" Directory="INSTALLDIR">
-            $(Get-ChildItem "$StageDir\bin\*.exe" | ForEach-Object {
-              "<Component><File Source=`"$($_.FullName)`" /></Component>"
-            })
+$(Get-ChildItem "$StageDir\bin\*.exe" | ForEach-Object {
+  "            <Component><File Source=`"$($_.FullName)`" /></Component>"
+})
           </ComponentGroup>
         </Directory>
       </Directory>
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="StartMenuDir" Name="ConnectAlso" />
-      </Directory>
     </Directory>
-
-    <!-- Register service -->
-    <ServiceInstall Id="DaemonService" Type="ownProcess" Name="ConnectAlsoDaemon"
-                    DisplayName="ConnectAlso Daemon" Description="ConnectAlso Virtual Network Daemon"
-                    Start="auto" ErrorControl="normal"
-                    Arguments='--control-url http://127.0.0.1:3000 --stun-server 127.0.0.1:3478 --relay-server 127.0.0.1:33478' />
-    <ServiceControl Id="DaemonControl" Name="ConnectAlsoDaemon" Start="install" Stop="both" Remove="uninstall" />
   </Package>
 </Wix>
 "@
 
-$WixSource | Out-File -FilePath "$StageDir\connectalso.wxs" -Encoding UTF8
-Push-Location $StageDir
-wix build connectalso.wxs -o "connectalso-$Version-x64.msi"
-Pop-Location
+    $WixSource | Out-File -FilePath "$StageDir\connectalso.wxs" -Encoding UTF8
+    Push-Location $StageDir
+    $env:WIX_EULA_ACCEPTED = "true"
+    wix build connectalso.wxs -o "connectalso-$Version-x64.msi"
+    $wixOk = ($LASTEXITCODE -eq 0)
+    Pop-Location
+    if ($wixOk) {
+        Write-Host "  MSI     : $OutputDir\connectalso-$Version-x64.msi"
+    } else {
+        Write-Host "  WiX build failed — see https://wixtoolset.org/osmf/ for EULA" -ForegroundColor DarkYellow
+    }
+} else {
+    Write-Host "  WiX Toolset not found — skipping MSI (install: winget install WiXToolset.WiXToolset)" -ForegroundColor DarkYellow
+}
 
 # 5. Create portable ZIP
 Write-Host "[5/5] Creating portable ZIP..." -ForegroundColor Yellow
@@ -117,5 +117,4 @@ Compress-Archive -Path "$StageDir\*" -DestinationPath "$OutputDir\connectalso-$V
 
 Write-Host ""
 Write-Host "Build complete!" -ForegroundColor Green
-Write-Host "  MSI     : $OutputDir\connectalso-$Version-x64.msi"
 Write-Host "  ZIP     : $OutputDir\connectalso-$Version-portable.zip"

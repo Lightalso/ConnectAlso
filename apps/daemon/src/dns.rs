@@ -7,12 +7,14 @@ use tokio::net::UdpSocket;
 ///
 /// Listens on a local UDP port and responds to A-record queries for
 /// hostnames matching `<name>.connectalso` or bare `<name>`.
+#[allow(dead_code)]
 pub struct DnsServer {
     socket: UdpSocket,
     records: HashMap<String, Ipv4Addr>,
     upstream: String,
 }
 
+#[allow(dead_code)]
 impl DnsServer {
     /// Create a new DNS server bound to `listen_addr`.
     pub async fn bind(listen_addr: &str, upstream: &str) -> Result<Self, std::io::Error> {
@@ -30,7 +32,7 @@ impl DnsServer {
     }
 
     /// Run the DNS server loop. Never returns.
-    pub async fn serve(mut self) {
+    pub async fn serve(self) {
         let mut buf = [0u8; 512];
         loop {
             let (n, src) = match self.socket.recv_from(&mut buf).await {

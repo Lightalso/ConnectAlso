@@ -1,3 +1,5 @@
+//! ConnectAlso relay service — forwards encrypted packets between peers.
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 

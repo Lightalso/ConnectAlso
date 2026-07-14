@@ -1,4 +1,6 @@
-﻿use std::collections::HashMap;
+﻿//! ConnectAlso daemon — background service for virtual networking.
+
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,10 +25,11 @@ use connectalso_tunnel::relay_pool::RelayPool;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing_subscriber::fmt::Layer;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer as _;
+use tracing_subscriber::fmt::Layer;
 use uuid::Uuid;
 
 // ════════════════════════════════════════════════════════════════════
@@ -76,6 +79,8 @@ struct RegisterRequest {
 struct RegisterResponse {
     device_id: Uuid,
     ipv4: String,
+    #[serde(default)]
+    #[allow(dead_code)]
     network: String,
     #[serde(default = "default_status")]
     status: String,
@@ -91,6 +96,7 @@ struct PeerInfo {
     ipv4: String,
     public_key: [u8; 32],
     hostname: String,
+    #[allow(dead_code)]
     last_seen_secs: i64,
 }
 
@@ -107,6 +113,7 @@ struct CandidatePublish {
 
 #[derive(Debug, Deserialize)]
 struct CandidateList {
+    #[allow(dead_code)]
     device_id: Uuid,
     candidates: Vec<String>,
 }
@@ -117,6 +124,7 @@ struct CandidateList {
 struct PeerLink {
     hostname: String,
     vip: Ipv4Addr,
+    #[allow(dead_code)]
     public_key: [u8; 32],
     path: PathManager,
     p2p_retry_ms: u64,
@@ -353,25 +361,25 @@ async fn main() -> anyhow::Result<()> {
         let s = state.lock().await;
         for link in s.peer_links.values() {
             let link = link.clone();
-            let tun = tun_tx.clone();
+            let _tun = tun_tx.clone();
             let sd = shutdown.clone();
             relay_tasks.push(tokio::spawn(async move {
                 loop {
                     tokio::select! {
                         _ = sd.cancelled() => break,
                         r = async {
-                            let lk = link.lock().await;
+                            let _lk = link.lock().await;
                             // Use relay directly for recv
                             // This is the relay client inside PathManager
                             Ok::<_, anyhow::Error>(())
                         } => { let _ = r; }
                     }
                     // Simple poll: try relay recv
-                    let lk = link.lock().await;
+                    let _lk = link.lock().await;
                     // We need to access the relay from PathManager
                     // PathManager doesn't expose recv directly for relay
                     // So we use a separate approach ══see below
-                    drop(lk);
+                    drop(_lk);
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 }
             }));
@@ -514,8 +522,8 @@ async fn attempt_p2p_for_all(
     peer_links: &HashMap<Uuid, Arc<Mutex<PeerLink>>>,
     http: &reqwest::Client,
     ctl: &str,
-    keypair: &KeyPair,
-    our_relay_id: PeerId,
+    _keypair: &KeyPair,
+    _our_relay_id: PeerId,
 ) {
     for (_pid, link) in peer_links {
         let mut lk = link.lock().await;
@@ -524,7 +532,7 @@ async fn attempt_p2p_for_all(
         }
 
         // Get peer candidates
-        let peer_addrs = get_peer_candidates(http, ctl, _pid).await;
+        let peer_addrs = get_peer_candidates(http, ctl, *_pid).await;
         if peer_addrs.is_empty() {
             continue;
         }

@@ -1,10 +1,10 @@
-use std::sync::Arc;
+//! ConnectAlso desktop tray application.
+
 use std::time::Duration;
 
 use anyhow::Context;
 use muda::{Menu, MenuItem, PredefinedMenuItem};
 use serde::Deserialize;
-use tokio::sync::Mutex;
 use tray_icon::{Icon, TrayIconBuilder};
 
 const DAEMON_URL: &str = "http://127.0.0.1:9823";
@@ -12,8 +12,11 @@ const DAEMON_URL: &str = "http://127.0.0.1:9823";
 #[derive(Debug, Deserialize, Default)]
 struct StatusResponse {
     device_id: String,
+    #[allow(dead_code)]
     virtual_ip: String,
+    #[allow(dead_code)]
     hostname: String,
+    #[allow(dead_code)]
     uptime_secs: u64,
     peer_count: usize,
     #[serde(default)]
@@ -23,8 +26,10 @@ struct StatusResponse {
 #[derive(Debug, Deserialize, Default)]
 struct StatusPeer {
     #[serde(default)]
+    #[allow(dead_code)]
     hostname: String,
     #[serde(default)]
+    #[allow(dead_code)]
     virtual_ip: String,
     #[serde(default)]
     path: String,
@@ -59,9 +64,9 @@ fn make_icon(color: [u8; 4]) -> Icon {
 
 fn status_color(status: ConnStatus) -> [u8; 4] {
     match status {
-        ConnStatus::Connected => [0x4C, 0xAF, 0x50, 0xFF],    // green
-        ConnStatus::RelayOnly => [0xFF, 0x98, 0x00, 0xFF],    // orange
-        ConnStatus::Disconnected => [0x9E, 0x9E, 0x9E, 0xFF], // gray
+        ConnStatus::Connected => [0x4C, 0xAF, 0x50, 0xFF],
+        ConnStatus::RelayOnly => [0xFF, 0x98, 0x00, 0xFF],
+        ConnStatus::Disconnected => [0x9E, 0x9E, 0x9E, 0xFF],
     }
 }
 
@@ -96,7 +101,6 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
     let daemon_url = std::env::var("CONNECTALSO_DAEMON").unwrap_or_else(|_| DAEMON_URL.to_string());
-
     tracing::info!("ConnectAlso Desktop Tray (daemon: {daemon_url})");
 
     let menu = Menu::new();
@@ -110,43 +114,29 @@ async fn main() -> anyhow::Result<()> {
     menu.append_items(&[&status_label, &sep1, &diag_label, &sep2, &about_label, &quit_item])?;
 
     let icon = make_icon(status_color(ConnStatus::Disconnected));
-    let tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_tooltip("ConnectAlso")
         .with_icon(icon)
         .build()
         .context("failed to create tray icon")?;
 
-    let current_status = Arc::new(Mutex::new(ConnStatus::Disconnected));
+    // Note: tray-icon/muda objects are not Send.
+    // Full interactive menu requires a platform event loop (winit/tao).
+    // For now, the tray shows a static icon as a visual indicator.
+    // Use `connectalso status` for interactive CLI status.
 
-    let tray_handle = tray.clone();
-    let status_arc = current_status.clone();
-    let url = daemon_url.clone();
-    let sl = status_label.clone();
+    tracing::info!("Tray icon active — use 'connectalso status' for details.");
+    tracing::info!("Press Ctrl+C to exit.");
 
-    tokio::spawn(async move {
-        loop {
-            let new_status = fetch_status(&url).await;
-            let mut prev = status_arc.lock().await;
-            if *prev != new_status {
-                *prev = new_status;
-                let _ = tray_handle.set_icon(Some(make_icon(status_color(new_status))));
-                let tooltip = format!("ConnectAlso — {}", fmt_status(new_status));
-                let _ = tray_handle.set_tooltip(Some(&tooltip));
-                let _ = sl.set_text(format!("Status: {}", fmt_status(new_status)));
-                tracing::info!("{}", tooltip);
-            }
-            drop(prev);
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        }
-    });
-
-    // Keep the process alive. The tray runs on the main thread.
-    // Menu items display info but don't have click handlers without an event loop.
-    tracing::info!("Tray icon active. Right-click for menu.");
-    tracing::info!("Use 'connectalso status' for full status.");
-
+    // Poll status in the main loop and update icon
+    let mut current = ConnStatus::Disconnected;
     loop {
-        tokio::time::sleep(Duration::from_secs(3600)).await;
+        let new_status = fetch_status(&daemon_url).await;
+        if new_status != current {
+            current = new_status;
+            tracing::info!("Status: {}", fmt_status(current));
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }

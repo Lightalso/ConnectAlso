@@ -186,6 +186,7 @@ pub async fn list_pending(pool: &SqlitePool) -> anyhow::Result<Vec<DeviceRecord>
 }
 
 /// Find a device by ID.
+#[allow(dead_code)]
 pub async fn find_by_id(pool: &SqlitePool, device_id: Uuid) -> Option<DeviceRecord> {
     sqlx::query_as::<_, DeviceRow>(
         "SELECT device_id, public_key, hostname, ipv4, status, created_at, last_seen
@@ -299,7 +300,8 @@ pub fn backup_path(db_path: &str) -> String {
 /// Create a backup by copying the SQLite database file.
 pub async fn create_backup(db_path: &str) -> anyhow::Result<String> {
     let src = Path::new(db_path);
-    let dst = Path::new(&backup_path(db_path));
+    let backup = backup_path(db_path);
+    let dst = Path::new(&backup);
 
     anyhow::ensure!(src.exists(), "database file not found");
     tokio::fs::copy(src, dst).await?;
@@ -311,7 +313,8 @@ pub async fn create_backup(db_path: &str) -> anyhow::Result<String> {
 
 /// Restore from a backup file.
 pub async fn restore_backup(db_path: &str) -> anyhow::Result<()> {
-    let src = Path::new(&backup_path(db_path));
+    let backup = backup_path(db_path);
+    let src = Path::new(&backup);
     anyhow::ensure!(src.exists(), "backup file not found");
 
     let dst = Path::new(db_path);
@@ -347,6 +350,8 @@ pub async fn get_candidates(pool: &SqlitePool, device_id: Uuid) -> anyhow::Resul
     Ok(rows.into_iter().map(|r| r.0).collect())
 }
 
+/// Purge stale candidate entries.
+#[allow(dead_code)]
 pub async fn purge_stale_candidates(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result<usize> {
     let cutoff = unix_now() - timeout_secs;
     let rows = sqlx::query("DELETE FROM candidates WHERE updated_at < ?").bind(cutoff).execute(pool).await?;
@@ -385,13 +390,14 @@ impl From<DeviceRow> for DeviceRecord {
 #[derive(sqlx::FromRow)]
 struct IpPoolRow {
     ipv4: String,
+    #[allow(dead_code)]
     allocated: i64,
 }
 
 // ── ACL ──
 
 /// A database row representing an ACL rule.
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, serde::Deserialize)]
 pub struct AclRuleRow {
     pub id: i64,
     pub priority: i32,

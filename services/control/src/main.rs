@@ -1,3 +1,5 @@
+//! ConnectAlso control service — device registration, peer discovery, ACL management.
+
 mod db;
 
 use std::net::{Ipv4Addr, SocketAddr};
