@@ -77,7 +77,11 @@ struct RegisterResponse {
     device_id: Uuid,
     ipv4: String,
     network: String,
+    #[serde(default = "default_status")]
+    status: String,
 }
+
+fn default_status() -> String { "approved".to_string() }
 
 #[derive(Debug, Deserialize, Clone)]
 struct PeerInfo {
@@ -254,6 +258,10 @@ async fn main() -> anyhow::Result<()> {
 
     let our_id = reg.device_id;
     let our_ip: Ipv4Addr = reg.ipv4.parse()?;
+
+    if reg.status == "pending" {
+        tracing::warn!("Device is PENDING approval. Admin must run: connectalso admin approve {}", our_id);
+    }
 
     DaemonConfig {
         device_id: our_id, public_key_hex: hex_encode(&pubkey),

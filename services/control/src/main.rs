@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,7 @@ struct RegisterResponse {
     device_id: Uuid,
     ipv4: String,
     network: String,
+    status: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,6 +37,15 @@ struct PeerInfo {
     ipv4: String,
     public_key: [u8; 32],
     hostname: String,
+    last_seen_secs: i64,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminPeerInfo {
+    device_id: Uuid,
+    ipv4: String,
+    hostname: String,
+    status: String,
     last_seen_secs: i64,
 }
 
@@ -84,12 +94,36 @@ struct CandidateListResponse {
     candidates: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct ApprovalResponse {
+    approved: bool,
+    device_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+struct RevokeResponse {
+    revoked: bool,
+    device_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+struct BackupResponse {
+    path: String,
+    success: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct RestoreResponse {
+    success: bool,
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // App state
 // ═══════════════════════════════════════════════════════════════════
 
 struct AppState {
     db: SqlitePool,
+    db_path: String,
     ip_base: u32,
     ip_max_offset: u32,
     network_cidr: String,
@@ -155,6 +189,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = Arc::new(AppState {
         db,
+        db_path: cli.db_path.clone(),
         ip_base,
         ip_max_offset,
         network_cidr: cli.network.clone(),
@@ -176,12 +211,18 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/api/v1/register", post(handle_register))
         .route("/api/v1/register/{device_id}", delete(handle_unregister))
+        .route("/api/v1/register/{device_id}/approve", put(handle_approve))
+        .route("/api/v1/register/{device_id}/revoke", put(handle_revoke))
+        .route("/api/v1/register/pending", get(handle_pending))
         .route("/api/v1/peers", get(handle_peers))
+        .route("/api/v1/admin/peers", get(handle_admin_peers))
         .route("/api/v1/heartbeat", post(handle_heartbeat))
         .route("/api/v1/health", get(handle_health))
         .route("/api/v1/allocations", get(handle_allocations))
         .route("/api/v1/candidates", post(handle_publish_candidates))
         .route("/api/v1/candidates/{device_id}", get(handle_get_candidates))
+        .route("/api/v1/backup", post(handle_backup))
+        .route("/api/v1/restore", post(handle_restore))
         .with_state(state);
 
     tracing::info!("Control service listening on {}", cli.listen);
@@ -200,56 +241,73 @@ async fn handle_register(
 ) -> Result<Json<RegisterResponse>, StatusCode> {
     // Check if public key already registered
     if let Some(existing) = db::find_by_public_key(&state.db, &req.public_key).await {
+        let status_str = match existing.status {
+            db::DeviceStatus::Approved => "approved",
+            db::DeviceStatus::Pending => "pending",
+            db::DeviceStatus::Revoked => "revoked",
+        };
         return Ok(Json(RegisterResponse {
             device_id: existing.device_id,
             ipv4: existing.ipv4.to_string(),
             network: state.network_cidr.clone(),
+            status: status_str.to_string(),
         }));
     }
 
     let device_id = Uuid::new_v4();
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
+    let now = unix_now();
 
     let ip = db::allocate_ip(&state.db, state.ip_base, state.ip_max_offset)
         .await
         .ok_or(StatusCode::CONFLICT)?;
+
+    let status = if is_first_device(&state.db).await {
+        db::DeviceStatus::Approved
+    } else {
+        db::DeviceStatus::Pending
+    };
 
     let record = db::DeviceRecord {
         device_id,
         public_key: req.public_key,
         hostname: req.hostname,
         ipv4: ip,
+        status,
         created_at: now,
         last_seen: now,
     };
 
-    db::upsert_device(&state.db, &record)
+    db::insert_device(&state.db, &record)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    tracing::info!(%device_id, %ip, "device registered");
+    let status_str = if status == db::DeviceStatus::Approved { "approved" } else { "pending" };
+    tracing::info!(%device_id, %ip, %status_str, "device registered");
 
     Ok(Json(RegisterResponse {
         device_id,
         ipv4: ip.to_string(),
         network: state.network_cidr.clone(),
+        status: status_str.to_string(),
     }))
+}
+
+async fn is_first_device(pool: &SqlitePool) -> bool {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM devices")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    count == 0
 }
 
 async fn handle_peers(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PeersResponse>, StatusCode> {
-    let devices = db::list_all(&state.db)
+    let devices = db::list_approved(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
+    let now = unix_now();
 
     let peers: Vec<PeerInfo> = devices
         .into_iter()
@@ -263,6 +321,32 @@ async fn handle_peers(
         .collect();
 
     Ok(Json(PeersResponse { peers }))
+}
+
+async fn handle_admin_peers(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let devices = db::list_all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let now = unix_now();
+    let peers: Vec<AdminPeerInfo> = devices
+        .into_iter()
+        .map(|d| AdminPeerInfo {
+            device_id: d.device_id,
+            ipv4: d.ipv4.to_string(),
+            hostname: d.hostname,
+            status: match d.status {
+                db::DeviceStatus::Approved => "approved",
+                db::DeviceStatus::Pending => "pending",
+                db::DeviceStatus::Revoked => "revoked",
+            }.to_string(),
+            last_seen_secs: now.saturating_sub(d.last_seen),
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "peers": peers })))
 }
 
 async fn handle_heartbeat(
@@ -331,4 +415,81 @@ async fn handle_get_candidates(
         device_id,
         candidates,
     }))
+}
+
+async fn handle_approve(
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Json<ApprovalResponse>, StatusCode> {
+    let approved = db::approve_device(&state.db, device_id)
+        .await
+        .unwrap_or(false);
+    if approved {
+        tracing::info!(%device_id, "device approved");
+    }
+    Ok(Json(ApprovalResponse { approved, device_id }))
+}
+
+async fn handle_revoke(
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Json<RevokeResponse>, StatusCode> {
+    let revoked = db::revoke_device(&state.db, device_id)
+        .await
+        .unwrap_or(false);
+    if revoked {
+        tracing::info!(%device_id, "device revoked");
+    }
+    Ok(Json(RevokeResponse { revoked, device_id }))
+}
+
+async fn handle_pending(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let devices = db::list_pending(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let pending: Vec<serde_json::Value> = devices
+        .into_iter()
+        .map(|d| serde_json::json!({
+            "device_id": d.device_id.to_string(),
+            "hostname": d.hostname,
+            "ipv4": d.ipv4.to_string(),
+            "created_at": d.created_at,
+        }))
+        .collect();
+
+    Ok(Json(serde_json::json!({ "pending": pending })))
+}
+
+async fn handle_backup(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<BackupResponse>, StatusCode> {
+    match db::create_backup(&state.db_path).await {
+        Ok(path) => Ok(Json(BackupResponse { path, success: true })),
+        Err(e) => {
+            tracing::error!(%e, "backup failed");
+            Ok(Json(BackupResponse { path: String::new(), success: false }))
+        }
+    }
+}
+
+async fn handle_restore(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<RestoreResponse>, StatusCode> {
+    match db::restore_backup(&state.db_path).await {
+        Ok(()) => Ok(Json(RestoreResponse { success: true })),
+        Err(e) => {
+            tracing::error!(%e, "restore failed");
+            Ok(Json(RestoreResponse { success: false }))
+        }
+    }
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
 }
