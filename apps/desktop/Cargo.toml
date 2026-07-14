@@ -5,16 +5,20 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[build-dependencies]
-tauri-build = { version = "2", features = [], optional = true }
+[[bin]]
+name = "connectalso-desktop"
+path = "src/main.rs"
 
 [dependencies]
 connectalso-core.workspace = true
 anyhow.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+tokio.workspace = true
 tracing.workspace = true
-
-[features]
-default = []
+tracing-subscriber.workspace = true
+tray-icon.workspace = true
+muda.workspace = true
 
 [lints]
 workspace = true
