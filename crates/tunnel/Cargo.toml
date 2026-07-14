@@ -9,10 +9,12 @@ repository.workspace = true
 connectalso-core.workspace = true
 connectalso-crypto.workspace = true
 bytes.workspace = true
-rand.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

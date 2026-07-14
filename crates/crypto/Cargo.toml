@@ -7,6 +7,8 @@ repository.workspace = true
 
 [dependencies]
 connectalso-core.workspace = true
+x25519-dalek.workspace = true
+chacha20poly1305.workspace = true
 rand.workspace = true
 serde.workspace = true
 thiserror.workspace = true
