@@ -1,3 +1,8 @@
+//! Relay protocol definitions for encrypted traffic forwarding.
+//!
+//! This crate defines the frame format used between peers and relay servers,
+//! including peer identification, message types, and wire encoding.
+
 use thiserror::Error;
 use uuid::Uuid;
 
