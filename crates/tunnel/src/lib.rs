@@ -10,6 +10,9 @@ const RESPONDER_TX_OFFSET: u64 = 1u64 << 32;
 
 const MAX_PACKET: usize = 65536;
 
+pub mod path;
+pub mod relay;
+
 /// Tunnel operation errors.
 #[derive(Debug, Error)]
 pub enum TunnelError {
@@ -110,6 +113,12 @@ impl Tunnel {
         );
         Ok((plaintext, peer))
     }
+
+    /// Consume the tunnel and return the underlying socket.
+    #[must_use]
+    pub fn into_socket(self) -> UdpSocket {
+        self.socket
+    }
 }
 
 #[cfg(test)]
@@ -135,14 +144,12 @@ mod tests {
         let bob_addr = bob.local_addr().unwrap();
         let alice_addr = alice.local_addr().unwrap();
 
-        // Alice -> Bob
         let msg = b"hello from alice";
         alice.send_to(msg, bob_addr).await.unwrap();
         let (received, from) = bob.recv_from().await.unwrap();
         assert_eq!(&received[..], msg);
         assert_eq!(from, alice_addr);
 
-        // Bob -> Alice
         let msg = b"echo from bob";
         bob.send_to(msg, alice_addr).await.unwrap();
         let (received, from) = alice.recv_from().await.unwrap();
@@ -169,10 +176,7 @@ mod tests {
 
         let eve_addr = eve.local_addr().unwrap();
 
-        alice
-            .send_to(b"secret", eve_addr)
-            .await
-            .unwrap();
+        alice.send_to(b"secret", eve_addr).await.unwrap();
 
         let result = eve.recv_from().await;
         assert!(result.is_err());

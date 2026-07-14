@@ -8,13 +8,16 @@ repository.workspace = true
 [dependencies]
 connectalso-core.workspace = true
 connectalso-crypto.workspace = true
+connectalso-relay-proto.workspace = true
 bytes.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true
