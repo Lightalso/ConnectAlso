@@ -335,7 +335,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // ── Periodic peer refresh ──
+    // ── Periodic peer refresh + heartbeat ──
     let refresh_shutdown = shutdown.clone();
     let _refresh = tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -343,6 +343,14 @@ async fn main() -> anyhow::Result<()> {
             tokio::select! {
                 _ = refresh_shutdown.cancelled() => break,
                 _ = interval.tick() => {
+                    // Heartbeat
+                    let _ = http
+                        .post(format!("{}/api/v1/heartbeat", ctl_url))
+                        .json(&serde_json::json!({"device_id": our_id}))
+                        .send()
+                        .await;
+
+                    // Refresh peers
                     if let Ok((routes, links)) = fetch_and_connect_peers(&http, &cli, our_id).await
                     {
                         let mut s = state.lock().await;
