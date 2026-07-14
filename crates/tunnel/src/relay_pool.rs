@@ -53,6 +53,12 @@ impl RelayPool {
         self.servers.len()
     }
 
+    /// Return `true` if the pool contains no relay servers.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.servers.is_empty()
+    }
+
     /// Probe all relay servers and update latency measurements.
     ///
     /// Sends a small UDP packet to each server and measures RTT.

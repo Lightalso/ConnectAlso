@@ -72,7 +72,6 @@ impl Tunnel {
     }
 
     /// Return the local socket address.
-    #[must_use]
     pub fn local_addr(&self) -> Result<SocketAddr, std::io::Error> {
         self.socket.local_addr()
     }
