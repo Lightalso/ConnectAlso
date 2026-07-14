@@ -1,4 +1,4 @@
-﻿//! ConnectAlso daemon — background service for virtual networking.
+//! ConnectAlso daemon — background service for virtual networking.
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -25,11 +25,11 @@ use connectalso_tunnel::relay_pool::RelayPool;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer as _;
-use tracing_subscriber::fmt::Layer;
 use uuid::Uuid;
 
 // ════════════════════════════════════════════════════════════════════

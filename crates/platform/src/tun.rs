@@ -95,11 +95,10 @@ impl TunDevice {
     /// Create a new TUN device with the given configuration.
     pub async fn create(config: TunConfig) -> Result<Self, TunError> {
         let tun2_config = config.to_tun2_config();
-        let device =
-            tokio::task::spawn_blocking(move || tun2::create(&tun2_config))
-                .await
-                .map_err(|e| TunError::Create(e.to_string()))?
-                .map_err(|e| TunError::Create(e.to_string()))?;
+        let device = tokio::task::spawn_blocking(move || tun2::create(&tun2_config))
+            .await
+            .map_err(|e| TunError::Create(e.to_string()))?
+            .map_err(|e| TunError::Create(e.to_string()))?;
         Ok(Self { inner: device, config })
     }
 

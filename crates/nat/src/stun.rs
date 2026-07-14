@@ -51,7 +51,6 @@ impl StunClient {
     }
 
     /// Return the local address of the underlying socket.
-    #[must_use]
     pub fn local_addr(&self) -> Result<SocketAddr, std::io::Error> {
         self.socket.local_addr()
     }
