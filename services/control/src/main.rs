@@ -72,6 +72,18 @@ struct HeartbeatRequest {
     device_id: Uuid,
 }
 
+#[derive(Debug, Deserialize)]
+struct CandidatePublishRequest {
+    device_id: Uuid,
+    candidates: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CandidateListResponse {
+    device_id: Uuid,
+    candidates: Vec<String>,
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // App state
 // ═══════════════════════════════════════════════════════════════════
@@ -168,6 +180,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/heartbeat", post(handle_heartbeat))
         .route("/api/v1/health", get(handle_health))
         .route("/api/v1/allocations", get(handle_allocations))
+        .route("/api/v1/candidates", post(handle_publish_candidates))
+        .route("/api/v1/candidates/{device_id}", get(handle_get_candidates))
         .with_state(state);
 
     tracing::info!("Control service listening on {}", cli.listen);
@@ -290,5 +304,31 @@ async fn handle_allocations(
         used,
         free: total.saturating_sub(used),
         network: state.network_cidr.clone(),
+    }))
+}
+
+async fn handle_publish_candidates(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CandidatePublishRequest>,
+) -> Result<StatusCode, StatusCode> {
+    for addr in &req.candidates {
+        db::upsert_candidate(&state.db, req.device_id, addr)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    tracing::debug!(device = %req.device_id, count = req.candidates.len(), "candidates published");
+    Ok(StatusCode::OK)
+}
+
+async fn handle_get_candidates(
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<Uuid>,
+) -> Result<Json<CandidateListResponse>, StatusCode> {
+    let candidates = db::get_candidates(&state.db, device_id)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    Ok(Json(CandidateListResponse {
+        device_id,
+        candidates,
     }))
 }

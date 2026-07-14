@@ -54,6 +54,19 @@ pub async fn init_db(path: &str) -> anyhow::Result<SqlitePool> {
     .execute(&pool)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS candidates (
+            device_id  TEXT NOT NULL,
+            address    TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (device_id, address)
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
     tracing::info!("database initialized: {path}");
     Ok(pool)
 }
@@ -244,6 +257,49 @@ impl From<DeviceRow> for DeviceRecord {
 struct IpPoolRow {
     ipv4: String,
     allocated: i64,
+}
+
+// ── Candidate exchange ──
+
+/// Publish or refresh a candidate address for a device.
+pub async fn upsert_candidate(
+    pool: &SqlitePool,
+    device_id: Uuid,
+    address: &str,
+) -> anyhow::Result<()> {
+    let now = unix_now();
+    sqlx::query(
+        "INSERT INTO candidates (device_id, address, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(device_id, address) DO UPDATE SET updated_at = ?",
+    )
+    .bind(device_id.to_string())
+    .bind(address)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// List candidate addresses for a device.
+pub async fn get_candidates(pool: &SqlitePool, device_id: Uuid) -> anyhow::Result<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT address FROM candidates WHERE device_id = ? ORDER BY updated_at DESC",
+    )
+    .bind(device_id.to_string())
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
+/// Purge candidate entries older than `timeout_secs`.
+pub async fn purge_stale_candidates(pool: &SqlitePool, timeout_secs: i64) -> anyhow::Result<usize> {
+    let cutoff = unix_now() - timeout_secs;
+    let rows = sqlx::query("DELETE FROM candidates WHERE updated_at < ?")
+        .bind(cutoff)
+        .execute(pool)
+        .await?;
+    Ok(rows.rows_affected() as usize)
 }
 
 fn unix_now() -> i64 {
