@@ -1,0 +1,36 @@
+# ConnectAlso Daemon — Linux systemd Service
+#
+# 安装:
+#   sudo cp deploy/systemd/connectalso-daemon.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now connectalso-daemon
+#
+# 查看日志:
+#   journalctl -u connectalso-daemon -f
+
+[Unit]
+Description=ConnectAlso Virtual Network Daemon
+Documentation=https://github.com/Lightalso/ConnectAlso
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/connectalso-daemon \
+    --control-url http://127.0.0.1:3000 \
+    --stun-server 127.0.0.1:3478 \
+    --relay-server 127.0.0.1:33478 \
+    --hostname %H
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+# TUN 设备需要 CAP_NET_ADMIN 或 root
+# AmbientCapabilities=CAP_NET_ADMIN
+
+# 环境变量
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

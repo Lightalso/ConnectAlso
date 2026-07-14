@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+ConnectAlso Daemon — macOS LaunchDaemon
+
+安装:
+  sudo cp deploy/launchd/com.connectalso.daemon.plist /Library/LaunchDaemons/
+  sudo launchctl load /Library/LaunchDaemons/com.connectalso.daemon.plist
+
+卸载:
+  sudo launchctl unload /Library/LaunchDaemons/com.connectalso.daemon.plist
+
+查看日志:
+  sudo log stream --predicate 'subsystem == "com.connectalso.daemon"'
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.connectalso.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/connectalso-daemon</string>
+        <string>--control-url</string>
+        <string>http://127.0.0.1:3000</string>
+        <string>--stun-server</string>
+        <string>127.0.0.1:3478</string>
+        <string>--relay-server</string>
+        <string>127.0.0.1:33478</string>
+        <string>--hostname</string>
+        <string>macos</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/connectalso-daemon.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/connectalso-daemon.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>RUST_LOG</key>
+        <string>info</string>
+    </dict>
+</dict>
+</plist>
