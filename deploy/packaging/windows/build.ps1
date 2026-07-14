@@ -68,8 +68,25 @@ if ($SignCert -and $SignPassword) {
 # 4. Create MSI installer with WiX
 Write-Host "[4/5] Creating MSI installer..." -ForegroundColor Yellow
 if (Get-Command wix -ErrorAction SilentlyContinue) {
+    # Generate <Component> elements for each exe
+    $components = ""
+    $compRefs = ""
+    Get-ChildItem "$StageDir\bin\*.exe" | ForEach-Object {
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
+        $safeName = $name -replace '-', '_'
+        $components += @"
+
+            <Component Id="comp_$safeName" Guid="*">
+              <File Id="file_$safeName" Source="$($_.FullName)" />
+            </Component>
+"@
+        $compRefs += @"
+
+        <ComponentRef Id="comp_$safeName" />
+"@
+    }
+
     $WixSource = @"
-<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="ConnectAlso" Manufacturer="ConnectAlso Contributors"
            Version="$Version" UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
@@ -77,21 +94,13 @@ if (Get-Command wix -ErrorAction SilentlyContinue) {
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Feature Id="Main" Title="ConnectAlso" Level="1">
-      <ComponentGroupRef Id="Binaries" />
+    <Feature Id="Main" Title="ConnectAlso" Level="1">$compRefs
     </Feature>
 
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLDIR" Name="ConnectAlso">
-          <ComponentGroup Id="Binaries" Directory="INSTALLDIR">
-$(Get-ChildItem "$StageDir\bin\*.exe" | ForEach-Object {
-  "            <Component><File Source=`"$($_.FullName)`" /></Component>"
-})
-          </ComponentGroup>
-        </Directory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="ConnectAlso">$components
       </Directory>
-    </Directory>
+    </StandardDirectory>
   </Package>
 </Wix>
 "@
@@ -101,11 +110,14 @@ $(Get-ChildItem "$StageDir\bin\*.exe" | ForEach-Object {
     $env:WIX_EULA_ACCEPTED = "true"
     wix build connectalso.wxs -o "connectalso-$Version-x64.msi"
     $wixOk = ($LASTEXITCODE -eq 0)
+    if ($wixOk) {
+        Move-Item -Force "connectalso-$Version-x64.msi" "$OutputDir\" -ErrorAction SilentlyContinue
+    }
     Pop-Location
     if ($wixOk) {
         Write-Host "  MSI     : $OutputDir\connectalso-$Version-x64.msi"
     } else {
-        Write-Host "  WiX build failed — see https://wixtoolset.org/osmf/ for EULA" -ForegroundColor DarkYellow
+        Write-Host "  WiX build failed" -ForegroundColor DarkYellow
     }
 } else {
     Write-Host "  WiX Toolset not found — skipping MSI (install: winget install WiXToolset.WiXToolset)" -ForegroundColor DarkYellow
