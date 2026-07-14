@@ -12,6 +12,7 @@ const MAX_PACKET: usize = 65536;
 
 pub mod path;
 pub mod relay;
+pub mod relay_pool;
 
 /// Tunnel operation errors.
 #[derive(Debug, Error)]

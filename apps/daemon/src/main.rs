@@ -17,6 +17,7 @@ use connectalso_platform::tun::{TunConfig, TunDevice};
 use connectalso_relay_proto::PeerId;
 use connectalso_tunnel::path::{PathManager, PathStatus};
 use connectalso_tunnel::relay::RelayClient;
+use connectalso_tunnel::relay_pool::RelayPool;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -37,7 +38,8 @@ struct DaemonConfig {
     virtual_ip: String,
     control_url: String,
     stun_server: String,
-    relay_server: String,
+    #[serde(default)]
+    relay_servers: Vec<String>,
     hostname: String,
 }
 
@@ -196,8 +198,9 @@ struct Cli {
     #[arg(long, default_value = "127.0.0.1:3478")]
     stun_server: SocketAddr,
 
-    #[arg(long, default_value = "127.0.0.1:33478")]
-    relay_server: SocketAddr,
+    /// 中继服务器地址（可多次指定，支持多区域）
+    #[arg(long = "relay", default_value = "127.0.0.1:33478")]
+    relay_servers: Vec<SocketAddr>,
 
     #[arg(long, default_value = "unnamed")]
     hostname: String,
@@ -267,8 +270,13 @@ async fn main() -> anyhow::Result<()> {
         device_id: our_id, public_key_hex: hex_encode(&pubkey),
         virtual_ip: our_ip.to_string(),
         control_url: cli.control_url.clone(), stun_server: cli.stun_server.to_string(),
-        relay_server: cli.relay_server.to_string(), hostname: cli.hostname.clone(),
+        relay_servers: cli.relay_servers.iter().map(|a| a.to_string()).collect(),
+        hostname: cli.hostname.clone(),
     }.save();
+
+    // ── Relay pool ──
+    let mut relay_pool = RelayPool::new(&cli.relay_servers);
+    tracing::info!(relays = cli.relay_servers.len(), "relay pool created");
 
     // ── STUN: discover + publish candidates ──
     let our_candidates = discover_candidates(cli.stun_server).await;
@@ -277,7 +285,7 @@ async fn main() -> anyhow::Result<()> {
     // ── Initial peer sync ──
     let our_relay_id = PeerId::from_bytes(our_id.into_bytes());
     let (ip_route, peer_links) = connect_peers(
-        &http, &cli, our_id, our_relay_id, &keypair,
+        &http, &cli.control_url, relay_pool.active_addr(), our_id, our_relay_id,
     ).await?;
 
     // ── TUN ──
@@ -389,13 +397,26 @@ async fn main() -> anyhow::Result<()> {
                         .json(&serde_json::json!({"device_id": our_id}))
                         .send().await;
 
+                    // Probe relays for latency + failover
+                    relay_pool.probe_all().await;
+                    let summary = relay_pool.summary();
+                    for s in &summary {
+                        tracing::debug!(
+                            addr = %s.addr,
+                            latency = ?s.latency_ms,
+                            healthy = s.healthy,
+                            active = s.active,
+                            "relay status"
+                        );
+                    }
+
                     // Republish candidates (address may have changed)
                     let fresh = discover_candidates(cli.stun_server).await;
                     publish_candidates(&http, &cli.control_url, our_id, &fresh).await;
 
                     // Sync peers
                     if let Ok((routes, links)) = connect_peers(
-                        &http, &cli, our_id, our_relay_id, &keypair,
+                        &http, &cli.control_url, relay_pool.active_addr(), our_id, our_relay_id,
                     ).await {
                         // Attempt P2P for new peers
                         attempt_p2p_for_all(&links, &http, &cli.control_url, &keypair, our_relay_id).await;
@@ -457,11 +478,11 @@ async fn get_peer_candidates(http: &reqwest::Client, ctl: &str, peer_id: Uuid) -
 }
 
 async fn connect_peers(
-    http: &reqwest::Client, cli: &Cli, our_id: Uuid,
-    our_relay_id: PeerId, keypair: &KeyPair,
+    http: &reqwest::Client, control_url: &str, relay_addr: SocketAddr,
+    our_id: Uuid, our_relay_id: PeerId,
 ) -> anyhow::Result<(HashMap<Ipv4Addr, Uuid>, HashMap<Uuid, Arc<Mutex<PeerLink>>>)> {
     let peers: PeersResponse = http
-        .get(format!("{}/api/v1/peers", cli.control_url))
+        .get(format!("{control_url}/api/v1/peers"))
         .send().await?.json().await?;
 
     let mut ip_route = HashMap::new();
@@ -472,7 +493,7 @@ async fn connect_peers(
         let peer_relay_id = PeerId::from_bytes(p.device_id.into_bytes());
 
         let relay = RelayClient::register(
-            "0.0.0.0:0".parse()?, cli.relay_server, our_relay_id, peer_relay_id,
+            "0.0.0.0:0".parse()?, relay_addr, our_relay_id, peer_relay_id,
         ).await?;
 
         let path = PathManager::new(relay, SocketAddr::new(
@@ -599,9 +620,11 @@ async fn handle_diagnostics(
     let (stun_status, stun_detail, stun_latency) =
         check_stun(config.as_ref().and_then(|c| c.stun_server.parse().ok())).await;
 
-    // Check relay
-    let (relay_status, relay_detail, relay_latency) =
-        check_udp(config.as_ref().and_then(|c| c.relay_server.parse().ok()), b"RELAY_CHECK").await;
+        // Check relay (probe all)
+        let (relay_status, relay_detail, relay_latency) =
+            check_udp(config.as_ref()
+                .and_then(|c| c.relay_servers.first())
+                .and_then(|a| a.parse().ok()), b"RELAY_CHECK").await;
 
     // TUN status
     let tun_status = CheckResult {
